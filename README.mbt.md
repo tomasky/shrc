@@ -32,21 +32,25 @@ your `PATH`.
 curl -LsSf https://raw.githubusercontent.com/tomasky/shrc/master/install.sh | bash
 ```
 
-The installer only places the `shrc` binary and makes it reachable. It prefers
-a directory that is already on your `PATH` (`~/.local/bin`, `~/bin`,
-`/usr/local/bin`), so the command works right away; otherwise it installs to
-`~/.shrc/bin`, adds that to the startup file for your login shell and prints
-the one line needed to activate it in the terminal you are in. Sourcing the
-script updates the current shell too:
+The installer places the `shrc` binary, makes it reachable, and then runs
+`shrc init` once to **import the environment variables and aliases your
+startup files already define**, so `shrc ls` starts out showing the real
+configuration instead of an empty store. It prefers a directory that is
+already on your `PATH` (`~/.local/bin`, `~/bin`, `/usr/local/bin`), so the
+command works right away; otherwise it installs to `~/.shrc/bin`, adds that to
+the startup file for your login shell and prints the one line needed to
+activate it in the terminal you are in. Sourcing the script updates the
+current shell too:
 
 ```sh
 source <(curl -LsSf https://raw.githubusercontent.com/tomasky/shrc/master/install.sh)
 ```
 
-Options: `--version <v>` (`-v`, e.g. `--version 0.1.1`), `--install-dir <dir>`
-(`-b`), `--no-modify-path`, `--no-verify`. Run `install.sh --help` for the full
-list and the environment overrides (`SHRC_VERSION`, `SHRC_INSTALL_DIR`,
-`SHRC_REPO`, `SHRC_DOWNLOAD_BASE`, `SHRC_NO_MODIFY_PATH`).
+Options: `--version <v>` (`-v`, e.g. `--version 0.1.2`), `--install-dir <dir>`
+(`-b`), `--no-modify-path`, `--no-init` (skip the import), `--no-verify`. Run
+`install.sh --help` for the full list and the environment overrides
+(`SHRC_VERSION`, `SHRC_INSTALL_DIR`, `SHRC_REPO`, `SHRC_DOWNLOAD_BASE`,
+`SHRC_NO_MODIFY_PATH`, `SHRC_NO_INIT`).
 
 ### npm
 
@@ -119,11 +123,17 @@ moon build --target native --release
 shrc set EDITOR vim            # environment variable, in every shell
 shrc set NAME=VALUE            # same, one argument
 shrc set -a ll 'ls -la'        # an alias instead of a variable
+shrc set --prepend PATH /opt/bin   # add a directory in front
+shrc set --append PATH /opt/bin    # add a directory at the end
+shrc set --drop PATH /opt/bin      # remove a directory
+shrc set -r EDITOR '$HOME/bin/vi'  # store shell syntax; references stay live
 shrc rm EDITOR                 # remove every entry named EDITOR
 shrc rm -a ll                  # remove only the alias
 shrc ls                        # list managed entries
 shrc ls EDIT                   # filter by name
+shrc ls PATH                   # search paths, one directory per row, in order
 shrc all                       # the manifest and every startup file
+shrc init                      # import what the startup files already define
 shrc version
 shrc help
 ```
@@ -141,12 +151,48 @@ for bash and zsh, `set -gx`/`alias` for fish, `setenv` for csh/tcsh,
 `$env.X = ...` for nushell, and `$env:X = ...` for PowerShell. A summary goes
 to standard error, so it never pollutes an `eval`.
 
+### Search paths (PATH and friends)
+
+Variables that hold an ordered list of directories — `PATH`, `PYTHONPATH`,
+`LD_LIBRARY_PATH`, `MANPATH`, `CLASSPATH` and anything else ending in `PATH` —
+get list semantics instead of a plain assignment:
+
+* `shrc set PATH /opt/bin` **prepends** the directory; the previous value is
+  kept through `$PATH`. `--append` adds at the end instead, `--drop` removes a
+  directory, and an identical directory is never duplicated.
+* `shrc set PATH '/a:/b'` (or the PowerShell spelling `'/a;/b'`) replaces the
+  whole list; a value containing `$` is stored as live syntax, so
+  `shrc set PATH "$HOME/bin:$PATH"` keeps expanding per shell.
+* Values are stored canonically with `:` and rendered with each shell's own
+  separator — PowerShell gets `;`: `$env:PATH = '$HOME/bin;$env:PATH'`.
+* `shrc ls PATH` prints the list as a table, one directory per row, in search
+  order, instead of one long line.
+
+### Importing existing configuration
+
+`shrc init` (also run automatically by the installer on a first install)
+scans the startup files for your detected shells and adopts what they already
+define: `export NAME=...`, `alias ...`, fish `set -gx`/`alias`, csh `setenv`,
+nushell `$env.NAME`, PowerShell `$env:NAME`, plus the companion files the
+startup files source (`~/.bash_aliases` and the like). Definitions move into
+the manifest and the managed block; files are backed up under
+`~/.shrc/backup/` before the first edit, and a definition whose value uses
+shell syntax shrc cannot translate (command substitutions, backticks, escapes)
+stays where it is. `shrc init -n` reports what it would do without touching
+anything.
+
 ## How it works
 
 * The manifest lives in `~/.shrc/entries` and is the source of truth for
   `shrc ls` and `shrc all`.
+* A manifest line can carry attributes: `raw` means the value is shell syntax
+  that stays live (`env	raw	EDITOR	$HOME/bin/vi`), `list` means a search
+  path stored with `:` between directories
+  (`env	raw,list	PATH	/opt/bin:$PATH`).
 * On every change, shrc renders the manifest for each detected shell and
   rewrites its managed block.
+* `shrc init` adopts what the startup files already define and moves those
+  lines into the block; each file it edits is backed up first.
 * A shell is managed when its startup file already exists or it is your login
   shell; when nothing is found, `~/.profile` is used as the portable baseline.
 

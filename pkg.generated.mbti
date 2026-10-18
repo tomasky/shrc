@@ -12,6 +12,8 @@ pub let block_end : String
 
 pub fn candidate_shells(String, String, String) -> Array[Shell]
 
+pub fn canonical_list(String, String) -> String
+
 pub fn current_eval_family() -> ShellFamily
 
 pub fn current_shells() -> Array[Shell]
@@ -22,6 +24,8 @@ pub fn dispatch(Array[String]) -> CliResult
 
 pub fn ensure_dir(String) -> Result[Unit, String]
 
+pub fn entry_eq(Entry, Entry) -> Bool
+
 pub fn entry_of_line(String) -> Entry?
 
 pub fn entry_to_line(Entry) -> String
@@ -30,7 +34,11 @@ pub fn escape_field(String) -> String
 
 pub fn eval_family(String?) -> ShellFamily
 
+pub fn family_path_sep(ShellFamily) -> String
+
 pub fn filter_entries(Array[Entry], String) -> Array[Entry]
+
+pub fn find_entry(Array[Entry], Entry) -> Entry?
 
 pub fn format_all(Array[Entry], Array[Shell]) -> String
 
@@ -40,9 +48,15 @@ pub fn help_text() -> String
 
 pub fn home_dir() -> String
 
+pub fn is_search_path_entry(Entry) -> Bool
+
+pub fn is_search_path_name(String) -> Bool
+
 pub fn is_valid_alias_name(String) -> Bool
 
 pub fn is_valid_env_name(String) -> Bool
+
+pub fn join_path(Array[String]) -> String
 
 pub fn kind_eq(EntryKind, EntryKind) -> Bool
 
@@ -52,6 +66,10 @@ pub fn load_entries() -> Array[Entry]
 
 pub fn manifest_path() -> String
 
+pub fn merge_candidates(Array[Entry], Array[Entry], Array[Entry]) -> (Int, Int)
+
+pub fn normalize_dir(String) -> String
+
 pub fn parse_entries(String) -> Array[Entry]
 
 pub fn parse_kind(String) -> EntryKind?
@@ -60,17 +78,35 @@ pub fn path_basename(String) -> String
 
 pub fn path_dirname(String) -> String
 
+pub fn path_insert(String, String, Bool) -> String
+
 pub fn path_join(String, String) -> String
+
+pub fn path_remove(String, String) -> (String, Bool)
+
+pub let path_sep : String
 
 pub fn quote_csh(String) -> String
 
+pub fn quote_csh_live(String) -> String
+
 pub fn quote_fish(String) -> String
+
+pub fn quote_fish_live(String) -> String
 
 pub fn quote_nu(String) -> String
 
+pub fn quote_nu_live(String) -> String
+
 pub fn quote_posix(String) -> String
 
+pub fn quote_posix_live(String) -> String
+
 pub fn quote_ps(String) -> String
+
+pub fn quote_ps_live(String) -> String
+
+pub fn refs_translatable(String) -> Bool
 
 pub fn remove_by_name(Array[Entry], String) -> (Array[Entry], Array[Entry])
 
@@ -80,7 +116,15 @@ pub fn render_entry(ShellFamily, Entry) -> String
 
 pub fn render_remove(ShellFamily, Entry) -> String
 
+pub fn same_dir(String, String) -> Bool
+
 pub fn save_entries(Array[Entry]) -> Result[Unit, String]
+
+pub fn scan_file(ShellFamily, String) -> FileScan
+
+pub fn search_path_vars() -> Array[String]
+
+pub fn self_ref(String) -> String
 
 pub fn serialize_entries(Array[Entry]) -> String
 
@@ -88,7 +132,13 @@ pub fn shrc_home() -> String
 
 pub let shrc_version : String
 
+pub fn sourced_files(ShellFamily, String) -> Array[String]
+
+pub fn split_path(String) -> Array[String]
+
 pub fn sync_block(String, ShellFamily, Array[Entry]) -> String
+
+pub fn translate_refs(ShellFamily, String) -> String
 
 pub fn unescape_field(String) -> String
 
@@ -111,12 +161,22 @@ pub(all) struct Entry {
   kind : EntryKind
   name : String
   value : String
+  raw : Bool
+  list : Bool
 }
 pub fn Entry::new(EntryKind, String, String) -> Self
+pub fn Entry::new_full(EntryKind, String, String, Bool, Bool) -> Self
+pub fn Entry::new_raw(EntryKind, String, String) -> Self
 
 pub(all) enum EntryKind {
   Env
   Alias
+}
+
+pub(all) struct FileScan {
+  cleaned : String
+  entries : Array[Entry]
+  retained : Int
 }
 
 pub(all) struct Shell {

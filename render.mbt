@@ -68,34 +68,134 @@ pub fn quote_ps(value : String) -> String {
 }
 
 ///|
+/// Double-quote a value for a POSIX shell while leaving `$` and backticks
+/// live, so an adopted `PATH` keeps expanding. Only `\` and `"` are escaped.
+pub fn quote_posix_live(value : String) -> String {
+  let escaped = value
+    .replace_all(old="\\", new="\\\\")
+    .replace_all(old="\"", new="\\\"")
+  "\"" + escaped + "\""
+}
+
+///|
+/// Double-quote a live value for fish. Interpolation works like a POSIX
+/// shell, so the escaping is the same.
+pub fn quote_fish_live(value : String) -> String {
+  let escaped = value
+    .replace_all(old="\\", new="\\\\")
+    .replace_all(old="\"", new="\\\"")
+  "\"" + escaped + "\""
+}
+
+///|
+/// Double-quote a live value for csh/tcsh. `!` stays a history escape even
+/// inside double quotes, so it is escaped as well.
+pub fn quote_csh_live(value : String) -> String {
+  let escaped = value
+    .replace_all(old="\\", new="\\\\")
+    .replace_all(old="\"", new="\\\"")
+    .replace_all(old="!", new="\\!")
+  "\"" + escaped + "\""
+}
+
+///|
+/// Quote a live value for nushell: an interpolating `$"..."` string, where
+/// `$VAR` expands at load time.
+pub fn quote_nu_live(value : String) -> String {
+  let escaped = value
+    .replace_all(old="\\", new="\\\\")
+    .replace_all(old="\"", new="\\\"")
+  "$\"" + escaped + "\""
+}
+
+///|
+/// Double-quote a live value for PowerShell, where `$VAR` expands inside
+/// double quotes. The backtick is PowerShell's escape character.
+pub fn quote_ps_live(value : String) -> String {
+  let escaped = value
+    .replace_all(old="`", new="``")
+    .replace_all(old="\"", new="`\"")
+  "\"" + escaped + "\""
+}
+
+///|
+/// The literal quoting of a value in the syntax of `family`.
+fn quote_literal(family : ShellFamily, value : String) -> String {
+  match family {
+    Posix => quote_posix(value)
+    Fish => quote_fish(value)
+    Csh => quote_csh(value)
+    Nu => quote_nu(value)
+    PowerShell => quote_ps(value)
+  }
+}
+
+///|
+/// The interpolating quoting of a live value in the syntax of `family`.
+fn quote_live(family : ShellFamily, value : String) -> String {
+  match family {
+    Posix => quote_posix_live(value)
+    Fish => quote_fish_live(value)
+    Csh => quote_csh_live(value)
+    Nu => quote_nu_live(value)
+    PowerShell => quote_ps_live(value)
+  }
+}
+
+///|
+/// The quoted form of an entry's value in the syntax of `family`: single
+/// quotes normally, interpolating quotes when the value stays live shell
+/// syntax. Live values are canonical (`$NAME`), so their references are
+/// rewritten for the family before quoting. A search path is stored with `:`
+/// separators and rendered with the family's own separator.
+fn quoted_value(family : ShellFamily, entry : Entry) -> String {
+  let text = if entry.list && family_path_sep(family) != path_sep {
+    entry.value.replace_all(old=path_sep, new=family_path_sep(family))
+  } else {
+    entry.value
+  }
+  if entry.raw {
+    quote_live(family, translate_refs(family, text))
+  } else {
+    quote_literal(family, text)
+  }
+}
+
+///|
 /// Render one entry in the syntax of `family`.
 pub fn render_entry(family : ShellFamily, entry : Entry) -> String {
   match family {
-    Posix =>
+    Posix => {
+      let value = quoted_value(family, entry)
       match entry.kind {
-        Env => "export \{entry.name}=\{quote_posix(entry.value)}"
-        Alias => "alias \{entry.name}=\{quote_posix(entry.value)}"
+        Env => "export \{entry.name}=\{value}"
+        Alias => "alias \{entry.name}=\{value}"
       }
-    Fish =>
+    }
+    Fish => {
+      let value = quoted_value(family, entry)
       match entry.kind {
-        Env => "set -gx \{entry.name} \{quote_fish(entry.value)}"
-        Alias => "alias \{entry.name} \{quote_fish(entry.value)}"
+        Env => "set -gx \{entry.name} \{value}"
+        Alias => "alias \{entry.name} \{value}"
       }
-    Csh =>
+    }
+    Csh => {
+      let value = quoted_value(family, entry)
       match entry.kind {
-        Env => "setenv \{entry.name} \{quote_csh(entry.value)}"
-        Alias => "alias \{entry.name} \{quote_csh(entry.value)}"
+        Env => "setenv \{entry.name} \{value}"
+        Alias => "alias \{entry.name} \{value}"
       }
+    }
     Nu =>
       match entry.kind {
-        Env => "$env.\{entry.name} = \{quote_nu(entry.value)}"
+        Env => "$env.\{entry.name} = \{quoted_value(family, entry)}"
         // nushell refuses `alias NAME = "..."` (an alias cannot expand to an
         // expression), so the value is the pipeline as typed.
         Alias => "alias \{entry.name} = \{entry.value}"
       }
     PowerShell =>
       match entry.kind {
-        Env => "$env:\{entry.name} = \{quote_ps(entry.value)}"
+        Env => "$env:\{entry.name} = \{quoted_value(family, entry)}"
         // PowerShell has no alias that carries arguments, so an alias becomes
         // a function whose body is the value as typed.
         Alias => "function \{entry.name} { \{entry.value} }"

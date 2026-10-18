@@ -66,16 +66,33 @@ pub fn apply_to_shells(
 }
 
 ///|
-/// One line per entry, in the order they are stored.
+/// One line per entry, in the order they are stored. A search-path entry is
+/// listed as one row per directory, indexed in search order, instead of one
+/// long line — so `shrc ls PATH` shows what the shell will actually search,
+/// in order.
 pub fn format_ls(entries : Array[Entry]) -> String {
   let out = StringBuilder()
   for entry in entries {
     out.write_string(kind_label(entry.kind))
     out.write_string("\t")
-    out.write_string(entry.name)
-    out.write_string("=")
-    out.write_string(entry.value)
-    out.write_char('\n')
+    if is_search_path_entry(entry) {
+      out.write_string(entry.name)
+      out.write_char('\n')
+      let parts = split_path(entry.value)
+      if parts.length() == 0 {
+        out.write_string("\t(empty)\n")
+      }
+      let mut i = 0
+      for part in parts {
+        out.write_string("\t\{i}\t\{part}\n")
+        i = i + 1
+      }
+    } else {
+      out.write_string(entry.name)
+      out.write_string("=")
+      out.write_string(entry.value)
+      out.write_char('\n')
+    }
   }
   out.to_string()
 }
@@ -92,9 +109,18 @@ pub fn format_all(entries : Array[Entry], shells : Array[Shell]) -> String {
     out.write_string("#   (none)\n")
   } else {
     for entry in entries {
-      out.write_string(
-        "#   \{kind_label(entry.kind)}  \{entry.name}=\{entry.value}\n",
-      )
+      if is_search_path_entry(entry) {
+        out.write_string("#   \{kind_label(entry.kind)}  \{entry.name}\n")
+        let mut i = 0
+        for part in split_path(entry.value) {
+          out.write_string("#     \{i}  \{part}\n")
+          i = i + 1
+        }
+      } else {
+        out.write_string(
+          "#   \{kind_label(entry.kind)}  \{entry.name}=\{entry.value}\n",
+        )
+      }
     }
   }
   out.write_string("\n# startup files\n")

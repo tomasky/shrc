@@ -11,7 +11,8 @@ one command.
 npm install -g @tomasko/shrc
 shrc set EDITOR vim
 shrc set -a ll 'ls -la'
-shrc ls
+shrc init            # import what your startup files already define
+shrc ls              # search paths are listed one directory per row
 shrc all
 ```
 
@@ -25,6 +26,13 @@ change to the current shell as well:
 eval "$(shrc set EDITOR vim)"
 eval "$(shrc rm EDITOR)"
 ```
+
+`PATH` and other search-path variables (`PYTHONPATH`, `LD_LIBRARY_PATH`,
+`MANPATH`, ...) are kept as ordered lists: `shrc set PATH /opt/bin` prepends a
+directory, `--append` adds at the end, `--drop` removes one, and
+`shrc ls PATH` prints the search order as a table. The values are stored once
+and rendered with each shell's own separator, so PowerShell gets `;` where
+bash and fish get `:`.
 
 ## What this package contains
 
@@ -54,7 +62,7 @@ dependency declares one:
 $ pnpm add @tomasko/shrc
 Error: ERR_PNPM_IGNORED_BUILDS
   × adding a new package
-  ╰─▶ Ignored build scripts: @tomasko/shrc@0.1.1
+  ╰─▶ Ignored build scripts: @tomasko/shrc@0.1.2
 ```
 
 Downloading lazily from `bin/shrc.js` sidesteps all of it: it works under npm,

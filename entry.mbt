@@ -25,16 +25,53 @@ pub fn kind_eq(a : EntryKind, b : EntryKind) -> Bool {
 
 ///|
 /// A single managed entry.
+///
+/// `raw` marks a value that is shell syntax rather than a literal string: an
+/// adopted `export PATH="$HOME/bin:$PATH"` must keep expanding when the
+/// startup file is read, so rendering embeds it in the family's interpolating
+/// quotes instead of literal single quotes. `list` marks a search path — the
+/// value is joined by `:` canonically and rendered with the family's own
+/// separator (PowerShell uses `;`).
 pub(all) struct Entry {
   kind : EntryKind
   name : String
   value : String
+  raw : Bool
+  list : Bool
 }
 
 ///|
-/// Build an entry.
+/// Build a literal entry.
 pub fn Entry::new(kind : EntryKind, name : String, value : String) -> Entry {
-  { kind, name, value, }
+  { kind, name, value, raw: false, list: false, }
+}
+
+///|
+/// Build an entry whose value stays live shell syntax (`$VAR`, backticks).
+pub fn Entry::new_raw(kind : EntryKind, name : String, value : String) -> Entry {
+  { kind, name, value, raw: true, list: false, }
+}
+
+///|
+/// Build an entry with every attribute spelled out.
+pub fn Entry::new_full(
+  kind : EntryKind,
+  name : String,
+  value : String,
+  raw : Bool,
+  list : Bool,
+) -> Entry {
+  { kind, name, value, raw, list, }
+}
+
+///|
+/// Whether two entries agree on kind, name, value and attributes.
+pub fn entry_eq(a : Entry, b : Entry) -> Bool {
+  kind_eq(a.kind, b.kind) &&
+  a.name == b.name &&
+  a.value == b.value &&
+  a.raw == b.raw &&
+  a.list == b.list
 }
 
 ///|
@@ -112,9 +149,31 @@ pub fn unescape_field(text : String) -> String {
 }
 
 ///|
-/// Serialize one entry as a manifest line: `kind<TAB>name<TAB>value`.
+/// The attribute field of a manifest line: empty, or a comma-separated list of
+/// `raw` (the value stays live shell syntax) and `list` (a search path).
+fn entry_flags(entry : Entry) -> String {
+  if entry.raw && entry.list {
+    "raw,list"
+  } else if entry.raw {
+    "raw"
+  } else if entry.list {
+    "list"
+  } else {
+    ""
+  }
+}
+
+///|
+/// Serialize one entry as a manifest line: `kind<TAB>name<TAB>value`, with an
+/// extra attribute field before the name when the value is not a plain
+/// literal (`raw`, `list`, or `raw,list`).
 pub fn entry_to_line(entry : Entry) -> String {
-  "\{kind_label(entry.kind)}\t\{entry.name}\t\{escape_field(entry.value)}"
+  let flags = entry_flags(entry)
+  if flags.length() == 0 {
+    "\{kind_label(entry.kind)}\t\{entry.name}\t\{escape_field(entry.value)}"
+  } else {
+    "\{kind_label(entry.kind)}\t\{flags}\t\{entry.name}\t\{escape_field(entry.value)}"
+  }
 }
 
 ///|
@@ -131,6 +190,26 @@ pub fn entry_of_line(line : String) -> Entry? {
   let kind = match parse_kind(parts[0].to_owned()) {
     Some(kind) => kind
     None => return None
+  }
+  if parts.length() >= 4 {
+    let mut raw = false
+    let mut list = false
+    for flag in parts[1].split(",") {
+      if flag == "raw" {
+        raw = true
+      } else if flag == "list" {
+        list = true
+      }
+    }
+    return Some(
+      Entry::new_full(
+        kind,
+        parts[2].to_owned(),
+        unescape_field(parts[3].to_owned()),
+        raw,
+        list,
+      ),
+    )
   }
   Some(
     Entry::new(kind, parts[1].to_owned(), unescape_field(parts[2].to_owned())),

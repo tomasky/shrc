@@ -2,10 +2,13 @@
 # shrc installer — https://github.com/tomasky/shrc
 #
 #   curl -LsSf https://raw.githubusercontent.com/tomasky/shrc/master/install.sh | bash
-#   curl -LsSf https://raw.githubusercontent.com/tomasky/shrc/master/install.sh | bash -s -- --version 0.1.1
+#   curl -LsSf https://raw.githubusercontent.com/tomasky/shrc/master/install.sh | bash -s -- --version 0.1.2
 #
 # The installer only places the `shrc` binary and makes it reachable. Managing
 # environment variables and aliases is `shrc`'s own job, not the installer's.
+# On a first install it does run `shrc init` once, so the configuration the
+# startup files already define is imported rather than ignored; `--no-init`
+# skips that.
 #
 # Environment overrides:
 #   SHRC_VERSION         release version to install (default: latest)
@@ -14,6 +17,7 @@
 #   SHRC_REPO            owner/repo to download from (default: tomasky/shrc)
 #   SHRC_DOWNLOAD_BASE   full base URL; overrides SHRC_REPO/SHRC_VERSION
 #   SHRC_NO_MODIFY_PATH  do not touch any shell startup file
+#   SHRC_NO_INIT         do not import the existing configuration
 set -euo pipefail
 
 REPO="${SHRC_REPO:-tomasky/shrc}"
@@ -31,15 +35,16 @@ Usage:
   install.sh [options]
 
 Options:
-  -v, --version <version>       install a specific version (e.g. 0.1.1)
+  -v, --version <version>       install a specific version (e.g. 0.1.2)
   -b, --install-dir <dir>       install into <dir>
       --no-modify-path          do not edit any shell startup file
+      --no-init                 do not import the existing configuration
       --no-verify               skip SHA-256 checksum verification
   -h, --help                    show this help
 
 Environment:
   SHRC_VERSION, SHRC_INSTALL_DIR, SHRC_REPO, SHRC_DOWNLOAD_BASE,
-  SHRC_NO_MODIFY_PATH
+  SHRC_NO_MODIFY_PATH, SHRC_NO_INIT
 EOF
 }
 
@@ -47,6 +52,7 @@ version=""
 install_dir=""
 verify=1
 modify_path=1
+init=1
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -80,6 +86,10 @@ while [ $# -gt 0 ]; do
       verify=0
       shift
       ;;
+    --no-init)
+      init=0
+      shift
+      ;;
     *)
       err "unknown argument: $1 (try --help)"
       ;;
@@ -89,6 +99,7 @@ done
 [ -n "$version" ] || version="${SHRC_VERSION:-}"
 [ -n "$install_dir" ] || install_dir="${SHRC_INSTALL_DIR:-}"
 [ -n "${SHRC_NO_MODIFY_PATH:-}" ] && modify_path=0
+[ -n "${SHRC_NO_INIT:-}" ] && init=0
 version="${version#v}"
 
 # --- detect platform -------------------------------------------------------
@@ -302,10 +313,25 @@ if ! installed_version="$("$install_dir/$BIN" version 2>/dev/null)"; then
   err "installed $install_dir/$BIN but it failed to run"
 fi
 say "$installed_version"
+
+# --- import what the user already has --------------------------------------
+# A first install adopts the environment variables and aliases the startup
+# files already define, so `shrc ls` shows the real configuration instead of
+# an empty store. This runs after the PATH edit above, so that line becomes a
+# managed entry too. A later install with an existing manifest is left alone.
+manifest="${SHRC_HOME:-$HOME/.shrc}/entries"
+if [ "$init" = 1 ] && [ ! -f "$manifest" ]; then
+  say ""
+  say "shrc: importing the configuration your startup files already define"
+  "$install_dir/$BIN" init ||
+    say "shrc: warning: 'shrc init' did not finish; run it again later"
+fi
+
 say ""
 say "shrc: manage environment variables and aliases with:"
 say "  shrc set EDITOR vim"
 say "  shrc set -a ll 'ls -la'"
-say "  shrc ls"
+say "  shrc set --prepend PATH /opt/bin"
+say "  shrc ls PATH"
 say "  shrc all"
 say "  eval \"\$(shrc set EDITOR vim)\"   # apply to the current shell"
