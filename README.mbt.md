@@ -32,25 +32,25 @@ your `PATH`.
 curl -LsSf https://raw.githubusercontent.com/tomasky/shrc/master/install.sh | bash
 ```
 
-The installer places the `shrc` binary, makes it reachable, and then runs
+The installer places the `shrc` binary, makes it reachable, and runs
 `shrc init` once to **import the environment variables and aliases your
-startup files already define**, so `shrc ls` starts out showing the real
-configuration instead of an empty store. It prefers a directory that is
-already on your `PATH` (`~/.local/bin`, `~/bin`, `/usr/local/bin`), so the
-command works right away; otherwise it installs to `~/.shrc/bin`, adds that to
-the startup file for your login shell and prints the one line needed to
-activate it in the terminal you are in. Sourcing the script updates the
-current shell too:
+startup files already define** into the manifest, so `shrc ls` starts out
+showing your real configuration. The startup files themselves are not
+modified. It prefers a directory that is already on your `PATH`
+(`~/.local/bin`, `~/bin`, `/usr/local/bin`), so the command works right away;
+otherwise it installs to `~/.shrc/bin`, adds that to the startup file for your
+login shell and prints the one line needed to activate it in the terminal you
+are in. Sourcing the script updates the current shell too:
 
 ```sh
 source <(curl -LsSf https://raw.githubusercontent.com/tomasky/shrc/master/install.sh)
 ```
 
 Options: `--version <v>` (`-v`, e.g. `--version 0.1.2`), `--install-dir <dir>`
-(`-b`), `--no-modify-path`, `--no-init` (skip the import), `--no-verify`. Run
-`install.sh --help` for the full list and the environment overrides
-(`SHRC_VERSION`, `SHRC_INSTALL_DIR`, `SHRC_REPO`, `SHRC_DOWNLOAD_BASE`,
-`SHRC_NO_MODIFY_PATH`, `SHRC_NO_INIT`).
+(`-b`), `--no-modify-path`, `--no-init`, `--no-verify`. Run `install.sh --help`
+for the full list and the environment overrides (`SHRC_VERSION`,
+`SHRC_INSTALL_DIR`, `SHRC_REPO`, `SHRC_DOWNLOAD_BASE`, `SHRC_NO_MODIFY_PATH`,
+`SHRC_NO_INIT`).
 
 ### npm
 
@@ -133,7 +133,7 @@ shrc ls                        # list managed entries
 shrc ls EDIT                   # filter by name
 shrc ls PATH                   # search paths, one directory per row, in order
 shrc all                       # the manifest and every startup file
-shrc init                      # import what the startup files already define
+shrc init                      # report what the startup files already define (--apply to adopt)
 shrc version
 shrc help
 ```
@@ -207,16 +207,13 @@ get list semantics instead of a plain assignment:
 
 ### Importing existing configuration
 
-`shrc init` (also run automatically by the installer on a first install)
-scans the startup files for your detected shells and adopts what they already
-define: `export NAME=...`, `alias ...`, fish `set -gx`/`alias`, csh `setenv`,
-nushell `$env.NAME`, PowerShell `$env:NAME`, plus the companion files the
-startup files source (`~/.bash_aliases` and the like). Definitions move into
-the manifest and the managed block; files are backed up under
-`~/.shrc/backup/` before the first edit, and a definition whose value uses
-shell syntax shrc cannot translate (command substitutions, backticks, escapes)
-stays where it is. `shrc init -n` reports what it would do without touching
-anything.
+`shrc init` (run automatically by the installer) scans the startup files for
+your detected shells and imports what they already define into the manifest, so
+`shrc ls` shows them. The startup files themselves are **not touched**: their
+original definitions stay where they are, and only `shrc set`/`shrc rm` rewrite
+the managed block. A definition whose value uses shell syntax shrc cannot
+translate (command substitutions, backticks, escapes) is skipped. `shrc init -n`
+reports what it would import without writing the manifest.
 
 ## How it works
 
@@ -228,8 +225,8 @@ anything.
   (`env	raw,list	PATH	/opt/bin:$PATH`).
 * On every change, shrc renders the manifest for each detected shell and
   rewrites its managed block.
-* `shrc init` adopts what the startup files already define and moves those
-  lines into the block; each file it edits is backed up first.
+* `shrc init` imports what the startup files already define into the manifest,
+  so `shrc ls` shows them; the startup files are not modified.
 * A shell is managed when its startup file already exists or it is your login
   shell; when nothing is found, `~/.profile` is used as the portable baseline.
 

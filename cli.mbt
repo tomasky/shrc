@@ -438,24 +438,14 @@ fn cmd_rm(args : Array[String]) -> CliResult {
 }
 
 ///|
-/// `shrc init [-n|--dry-run] [-q|--quiet]`
-///
-/// Adopt what the startup files already define. Top-level definitions move
-/// into the manifest and the managed block; a name the manifest already knows
-/// keeps its value. Every file that loses a line is backed up under
-/// `$SHRC_HOME/backup/` once, before the first edit.
-fn cmd_init(args : Array[String]) -> CliResult {
-  let mut dry_run = false
-  let mut quiet = false
-  for arg in args {
-    match arg {
-      "-n" | "--dry-run" => dry_run = true
-      "-q" | "--quiet" => quiet = true
-      _ => return failure("shrc: init takes only -n/--dry-run and -q/--quiet")
-    }
-  }
+/// Scan every detected startup file (and the files it sources) for definitions.
+/// Merges them into `entries` (the loaded manifest) so conflicts and
+/// duplicates are detected, and returns the newly imported entries plus the
+/// scan details. Does not modify any file.
+fn discover_candidates(
+  entries : Array[Entry],
+) -> (Array[Entry], Array[(Shell, FileScan, String)], Int32, Int32, Int32) {
   let shells = current_shells()
-  let entries = load_entries()
   let imported = []
   let scans = []
   let mut duplicates = 0
@@ -476,8 +466,6 @@ fn cmd_init(args : Array[String]) -> CliResult {
       follow.push((shell.family, original))
     }
   }
-  // Follow the companion files the startup files load (`~/.bash_aliases` and
-  // friends), one level deep, so definitions kept there are managed too.
   let seen = []
   for shell in shells {
     seen.push(shell.rc)
@@ -504,9 +492,31 @@ fn cmd_init(args : Array[String]) -> CliResult {
     duplicates = duplicates + tally.0
     conflicts = conflicts + tally.1
   }
-  // Editing is worth it when something is new, or when a conflicting line
-  // should give way to an existing entry. With nothing to adopt and no
-  // managed entries, no file is touched at all.
+  (imported, scans, duplicates, conflicts, retained)
+}
+
+///|
+/// `shrc init [-n|--dry-run] [-q|--quiet]`
+///
+/// Import what the startup files already define into the manifest, so
+/// `shrc ls` shows them. The startup files themselves are not touched: their
+/// original definitions stay where they are, and `shrc set`/`shrc rm` are the
+/// only commands that rewrite the managed block. A name the manifest already
+/// knows keeps its value.
+fn cmd_init(args : Array[String]) -> CliResult {
+  let mut dry_run = false
+  let mut quiet = false
+  for arg in args {
+    match arg {
+      "-n" | "--dry-run" => dry_run = true
+      "-q" | "--quiet" => quiet = true
+      _ => return failure("shrc: init takes only -n/--dry-run and -q/--quiet")
+    }
+  }
+  let entries = load_entries()
+  let (imported, scans, duplicates, conflicts, retained) = discover_candidates(
+    entries,
+  )
   let has_work = imported.length() > 0 ||
     (scans.length() > 0 && entries.length() > 0)
   let notes = []
@@ -540,48 +550,14 @@ fn cmd_init(args : Array[String]) -> CliResult {
   } else {
     format_ls(imported).trim_end().to_owned()
   }
-  if !dry_run {
-    install_shell_integration()
-  }
-  if !has_work || dry_run {
+  if dry_run || imported.length() == 0 {
     return ok_with(out, notes.join("\n"))
   }
   match save_entries(entries) {
     Ok(_) => ()
     Err(message) => return failure("shrc: \{message}")
   }
-  let errors = []
-  let backup_dir = path_join(shrc_home(), "backup")
-  for item in scans {
-    let (shell, scan, original) = item
-    let backup = path_join(backup_dir, path_basename(shell.rc))
-    if !@fs.path_exists(backup) {
-      match ensure_dir(backup_dir) {
-        Ok(_) => ()
-        Err(message) => errors.push(message)
-      }
-      @fs.write_string_to_file(backup, original) catch {
-        _ => errors.push("cannot write backup '\{backup}'")
-      }
-    }
-    @fs.write_string_to_file(shell.rc, scan.cleaned) catch {
-      _ => errors.push("cannot write '\{shell.rc}'")
-    }
-  }
-  for message in apply_to_shells(entries, shells) {
-    errors.push(message)
-  }
-  // Install the optional shell integration (auto-eval for set/rm) into every
-  // detected startup file, guarded by a marker so it is never duplicated.
-  install_shell_integration()
-  for message in errors {
-    notes.push("shrc: \{message}")
-  }
-  if errors.length() > 0 {
-    { code: 1, out, err: notes.join("\n"), }
-  } else {
-    ok_with(out, notes.join("\n"))
-  }
+  ok_with(out, notes.join("\n"))
 }
 
 ///|
