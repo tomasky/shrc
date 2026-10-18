@@ -1,7 +1,13 @@
 # shrc
 
+[![CI](https://github.com/tomasky/shrc/actions/workflows/ci.yml/badge.svg)](https://github.com/tomasky/shrc/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/@tomasko/shrc.svg)](https://www.npmjs.com/package/@tomasko/shrc)
+[![Mooncakes](https://img.shields.io/badge/mooncakes-kupas%2Fshrc-blue)](https://mooncakes.io/docs/kupas/shrc)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](#license)
+
 Manage environment variables and aliases across **every** shell you use —
-bash, zsh, fish and the plain POSIX `/bin/sh` family — from a single command.
+bash, zsh, fish, csh/tcsh, nushell, PowerShell and the plain POSIX `/bin/sh`
+family — from a single command.
 
 `shrc` keeps one managed block in each of your startup files:
 
@@ -17,35 +23,94 @@ twice never duplicates a line, and `shrc rm` leaves no trace behind.
 
 ## Install
 
+Pick one of the ways below. Every one of them ends with a working `shrc` on
+your `PATH`.
+
+### Installer script (recommended)
+
 ```sh
 curl -LsSf https://raw.githubusercontent.com/tomasky/shrc/master/install.sh | bash
 ```
 
-The installer only places the `shrc` binary. It prefers a directory that is
-already on your `PATH` (`~/.local/bin`, `~/bin`, `/usr/local/bin`), so the
-command works right away; otherwise it installs to `~/.shrc/bin` and adds that
-to the startup file for your login shell. Sourcing the script updates the
-current shell too:
+The installer only places the `shrc` binary and makes it reachable. It prefers
+a directory that is already on your `PATH` (`~/.local/bin`, `~/bin`,
+`/usr/local/bin`), so the command works right away; otherwise it installs to
+`~/.shrc/bin`, adds that to the startup file for your login shell and prints
+the one line needed to activate it in the terminal you are in. Sourcing the
+script updates the current shell too:
 
 ```sh
 source <(curl -LsSf https://raw.githubusercontent.com/tomasky/shrc/master/install.sh)
 ```
 
+Options: `--version <v>` (`-v`, e.g. `--version 0.1.1`), `--install-dir <dir>`
+(`-b`), `--no-modify-path`, `--no-verify`. Run `install.sh --help` for the full
+list and the environment overrides (`SHRC_VERSION`, `SHRC_INSTALL_DIR`,
+`SHRC_REPO`, `SHRC_DOWNLOAD_BASE`, `SHRC_NO_MODIFY_PATH`).
+
 ### npm
 
 ```sh
 npm install -g @tomasko/shrc
+npx @tomasko/shrc ls          # or pnpm / yarn / bun, no global install needed
 ```
 
 The npm package is a launcher: it downloads the matching prebuilt binary from
 GitHub Releases on first run and caches it, so it works under npm, pnpm, yarn,
 bun and `npx` with no install script.
 
+### MoonBit
+
+```sh
+moon install kupas/shrc/cmd/shrc
+```
+
+Installs the published binary into `~/.moon/bin`. To use `shrc` as a MoonBit
+library instead:
+
+```sh
+moon add kupas/shrc
+```
+
+### Windows
+
+`npm install -g @tomasko/shrc` works as-is — the launcher fetches
+`shrc-windows-x86_64.exe` on first run. You can also download that `.exe` from
+the [latest release](https://github.com/tomasky/shrc/releases/latest) and put
+it on your `PATH`. The installer script recognises Git Bash, MSYS2 and Cygwin,
+so the one-liner above works there too.
+
+### Prebuilt binary
+
+Download the asset for your platform from the
+[latest release](https://github.com/tomasky/shrc/releases/latest), make it
+executable and put it on your `PATH`:
+
+| Platform | Asset |
+| --- | --- |
+| Linux x86-64 | `shrc-linux-x86_64` (static, musl) |
+| Linux arm64 | `shrc-linux-aarch64` (static, musl) |
+| macOS Apple silicon | `shrc-darwin-aarch64` |
+| Windows x86-64 | `shrc-windows-x86_64.exe` (MSVC) |
+
+Each asset ships next to a `.sha256` checksum file:
+
+```sh
+curl -LO https://github.com/tomasky/shrc/releases/latest/download/shrc-linux-x86_64
+curl -LO https://github.com/tomasky/shrc/releases/latest/download/shrc-linux-x86_64.sha256
+sha256sum -c shrc-linux-x86_64.sha256
+install -m 755 shrc-linux-x86_64 ~/.local/bin/shrc
+```
+
+The Linux builds are linked statically against musl, so they run on any
+distribution regardless of its glibc version.
+
 ### From source
 
 ```sh
 git clone https://github.com/tomasky/shrc && cd shrc
 moon build --target native --release
+./_build/native/release/build/cmd/shrc/shrc.exe help
 ```
 
 ## Usage
@@ -72,8 +137,9 @@ eval "$(shrc rm EDITOR)"
 ```
 
 The printed line is syntax for your login shell (`$SHELL`): `export`/`alias`
-for bash and zsh, `set -gx`/`alias` for fish. A summary goes to standard error,
-so it never pollutes an `eval`.
+for bash and zsh, `set -gx`/`alias` for fish, `setenv` for csh/tcsh,
+`$env.X = ...` for nushell, and `$env:X = ...` for PowerShell. A summary goes
+to standard error, so it never pollutes an `eval`.
 
 ## How it works
 
@@ -86,10 +152,14 @@ so it never pollutes an `eval`.
 
 | Shell | Startup file |
 | --- | --- |
-| profile (sh, dash, ksh, ...) | `~/.profile` |
-| bash | `~/.bashrc` (or `~/.bash_profile` when that is what exists) |
-| zsh | `${ZDOTDIR:-$HOME}/.zshrc` (or `.zprofile`) |
+| profile (sh, dash, ...) | `~/.profile` |
+| bash | `~/.bashrc` (or `~/.bash_profile`, `~/.bash_login`) |
+| zsh | `${ZDOTDIR:-$HOME}/.zshrc` (or `.zprofile`, `.zshenv`) |
+| ksh / mksh | `~/.kshrc` / `~/.mkshrc` |
 | fish | `${XDG_CONFIG_HOME:-$HOME/.config}/fish/config.fish` |
+| csh / tcsh | `~/.cshrc`, `~/.tcshrc`, `~/.login` |
+| nushell | `${XDG_CONFIG_HOME:-$HOME/.config}/nushell/config.nu`, `env.nu` |
+| PowerShell | `${XDG_CONFIG_HOME:-$HOME/.config}/powershell/Microsoft.PowerShell_profile.ps1`, `~/Documents/PowerShell/...` |
 
 ## Environment
 
@@ -97,6 +167,8 @@ so it never pollutes an `eval`.
 | --- | --- |
 | `SHRC_HOME` | Where the manifest lives (default: `~/.shrc`) |
 | `SHELL` | Picks the syntax of the statement printed for `eval` |
+| `XDG_CONFIG_HOME` | Base for the fish, nushell and pwsh startup files |
+| `ZDOTDIR` | Directory holding the zsh startup files |
 
 The installer and npm launcher read a few more (`SHRC_INSTALL_DIR`,
 `SHRC_DOWNLOAD_BASE`, `SHRC_NO_MODIFY_PATH`, `SHRC_BINARY`, `SHRC_CACHE_DIR`);

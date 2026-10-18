@@ -48,13 +48,22 @@ pub fn path_join(left : String, right : String) -> String {
 }
 
 ///|
-/// The user's home directory. Falls back to `/` when `HOME` is unset, which
-/// keeps the pure path helpers total; commands report a clearer error before
-/// they ever need it.
+/// The user's home directory. On Windows `HOME` is often unset, so fall back
+/// to `USERPROFILE` and then to `HOMEDRIVE`+`HOMEPATH`; `/` is the last resort
+/// so the pure path helpers stay total.
 pub fn home_dir() -> String {
   match @env.get_env_var("HOME") {
     Some(h) if h.length() > 0 => h
-    _ => "/"
+    _ =>
+      match @env.get_env_var("USERPROFILE") {
+        Some(h) if h.length() > 0 => h
+        _ =>
+          match (@env.get_env_var("HOMEDRIVE"), @env.get_env_var("HOMEPATH")) {
+            (Some(drive), Some(path)) if drive.length() > 0 && path.length() > 0 =>
+              drive + path
+            _ => "/"
+          }
+      }
   }
 }
 

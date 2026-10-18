@@ -34,9 +34,11 @@ const TARGETS = {
   "linux-x64": "linux-x86_64",
   "linux-arm64": "linux-aarch64",
   "darwin-arm64": "darwin-aarch64",
+  "win32-x64": "windows-x86_64",
 };
 
-const SUPPORTED = "linux-x86_64, linux-aarch64 and darwin-aarch64";
+const SUPPORTED =
+  "linux-x86_64, linux-aarch64, darwin-aarch64 and windows-x86_64";
 
 function targetName() {
   return TARGETS[`${process.platform}-${process.arch}`];
@@ -56,8 +58,14 @@ function version() {
   return (process.env.SHRC_VERSION || pkg.version).replace(/^v/, "");
 }
 
+// Windows release assets and cached binaries carry an `.exe` suffix; all
+// other targets are bare executables.
+function exeSuffix(target) {
+  return target.startsWith("windows-") ? ".exe" : "";
+}
+
 function assetName(target) {
-  return `shrc-${target}`;
+  return `shrc-${target}${exeSuffix(target)}`;
 }
 
 // Both URLs are tried in order: the pinned version first, then whatever is
@@ -87,7 +95,10 @@ function cacheDir() {
 }
 
 function binaryPath(target) {
-  return path.join(cacheDir(), `shrc-${version()}-${target}`);
+  return path.join(
+    cacheDir(),
+    `shrc-${version()}-${target}${exeSuffix(target)}`
+  );
 }
 
 function isRunnable(file) {
@@ -214,7 +225,7 @@ async function ensureBinary({ force = false, log = () => {} } = {}) {
     throw new Error(
       `shrc does not ship a binary for ${process.platform}/${process.arch}; ` +
         `supported: ${SUPPORTED}. Build from source instead: ` +
-        `https://github.com/${repoSlug()}#build-from-source`
+        `https://github.com/${repoSlug()}#from-source`
     );
   }
 

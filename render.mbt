@@ -39,6 +39,35 @@ pub fn quote_fish(value : String) -> String {
 }
 
 ///|
+/// Single-quote a value for csh/tcsh. csh expands `!` for history even inside
+/// single quotes, so it is escaped separately; a `'` is closed and reopened
+/// around an escaped one.
+pub fn quote_csh(value : String) -> String {
+  let bang = value.replace_all(old="!", new="\\!")
+  "'" + bang.replace_all(old="'", new="'\\''") + "'"
+}
+
+///|
+/// Double-quote a value for nushell. nushell's double-quoted strings do not
+/// interpolate `$`, so only backslash, the quote itself and the control
+/// characters need escaping.
+pub fn quote_nu(value : String) -> String {
+  let escaped = value
+    .replace_all(old="\\", new="\\\\")
+    .replace_all(old="\n", new="\\n")
+    .replace_all(old="\t", new="\\t")
+    .replace_all(old="\r", new="\\r")
+    .replace_all(old="\"", new="\\\"")
+  "\"" + escaped + "\""
+}
+
+///|
+/// Single-quote a value for PowerShell. A single quote is doubled.
+pub fn quote_ps(value : String) -> String {
+  "'" + value.replace_all(old="'", new="''") + "'"
+}
+
+///|
 /// Render one entry in the syntax of `family`.
 pub fn render_entry(family : ShellFamily, entry : Entry) -> String {
   match family {
@@ -51,6 +80,25 @@ pub fn render_entry(family : ShellFamily, entry : Entry) -> String {
       match entry.kind {
         Env => "set -gx \{entry.name} \{quote_fish(entry.value)}"
         Alias => "alias \{entry.name} \{quote_fish(entry.value)}"
+      }
+    Csh =>
+      match entry.kind {
+        Env => "setenv \{entry.name} \{quote_csh(entry.value)}"
+        Alias => "alias \{entry.name} \{quote_csh(entry.value)}"
+      }
+    Nu =>
+      match entry.kind {
+        Env => "$env.\{entry.name} = \{quote_nu(entry.value)}"
+        // nushell refuses `alias NAME = "..."` (an alias cannot expand to an
+        // expression), so the value is the pipeline as typed.
+        Alias => "alias \{entry.name} = \{entry.value}"
+      }
+    PowerShell =>
+      match entry.kind {
+        Env => "$env:\{entry.name} = \{quote_ps(entry.value)}"
+        // PowerShell has no alias that carries arguments, so an alias becomes
+        // a function whose body is the value as typed.
+        Alias => "function \{entry.name} { \{entry.value} }"
       }
   }
 }
@@ -75,6 +123,22 @@ pub fn render_remove(family : ShellFamily, entry : Entry) -> String {
         Env => "set -e \{entry.name}"
         Alias => "functions -e \{entry.name} 2>/dev/null; true"
       }
+    Csh =>
+      match entry.kind {
+        Env => "unsetenv \{entry.name}"
+        Alias => "unalias \{entry.name}"
+      }
+    Nu =>
+      match entry.kind {
+        Env => "hide-env \{entry.name}"
+        Alias => "hide \{entry.name}"
+      }
+    PowerShell =>
+      match entry.kind {
+        Env => "Remove-Item Env:\{entry.name} -ErrorAction SilentlyContinue"
+        Alias =>
+          "Remove-Item Function:\{entry.name} -ErrorAction SilentlyContinue"
+      }
   }
 }
 
@@ -88,17 +152,6 @@ fn split_lines(text : String) -> Array[String] {
   } else {
     raw
   }
-}
-
-///|
-/// The index of the first line equal to `target`.
-fn find_line(lines : Array[String], target : String) -> Int32? {
-  for i = 0; i < lines.length(); i = i + 1 {
-    if lines[i] == target {
-      return Some(i)
-    }
-  }
-  None
 }
 
 ///|
@@ -116,42 +169,64 @@ fn block_lines(family : ShellFamily, entries : Array[Entry]) -> Array[String] {
 /// Return `text` with its managed block replaced by the one for `entries`.
 ///
 /// A file without a block gets one appended; an empty entry list removes the
-/// block entirely, so `shrc rm` leaves no trace.
+/// block entirely, so `shrc rm` leaves no trace. Duplicate or unbalanced
+/// markers — what a hand edit can leave behind — are collapsed too: the first
+/// complete block is rewritten in place and any other marker or block is
+/// dropped, so a file can never accumulate two shrc blocks, and a stray
+/// opening marker can never swallow the lines around it.
 pub fn sync_block(
   text : String,
   family : ShellFamily,
   entries : Array[Entry],
 ) -> String {
   let lines = split_lines(text)
-  let begin = find_line(lines, block_begin)
-  let end = find_line(lines, block_end)
+  let block = block_lines(family, entries)
   let out = []
-  match (begin, end) {
-    (Some(b), Some(e)) if b <= e => {
-      for i = 0; i < b; i = i + 1 {
-        out.push(lines[i])
-      }
-      if entries.length() > 0 {
-        for line in block_lines(family, entries) {
-          out.push(line)
+  let mut replaced = false
+  let mut i = 0
+  while i < lines.length() {
+    let line = lines[i]
+    if line == block_begin {
+      let mut end = i + 1
+      let mut nested = false
+      while end < lines.length() && lines[end] != block_end {
+        if lines[end] == block_begin {
+          nested = true
+          break
         }
+        end = end + 1
       }
-      for i = e + 1; i < lines.length(); i = i + 1 {
-        out.push(lines[i])
+      if nested {
+        // A second opening marker before any closing one: this outer marker
+        // is stray, and the inner pair is the real block.
+        i = i + 1
+      } else if end < lines.length() {
+        if !replaced && entries.length() > 0 {
+          for block_line in block {
+            out.push(block_line)
+          }
+        }
+        replaced = true
+        i = end + 1
+      } else {
+        // An opening marker with no closing one: drop the stray marker and
+        // keep everything after it.
+        i = i + 1
       }
+    } else if line == block_end {
+      // A closing marker with no opening one.
+      i = i + 1
+    } else {
+      out.push(line)
+      i = i + 1
     }
-    _ => {
-      for line in lines {
-        out.push(line)
-      }
-      if entries.length() > 0 {
-        if out.length() > 0 {
-          out.push("")
-        }
-        for line in block_lines(family, entries) {
-          out.push(line)
-        }
-      }
+  }
+  if !replaced && entries.length() > 0 {
+    if out.length() > 0 {
+      out.push("")
+    }
+    for block_line in block {
+      out.push(block_line)
     }
   }
   if out.length() == 0 {

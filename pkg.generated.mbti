@@ -12,6 +12,8 @@ pub let block_end : String
 
 pub fn candidate_shells(String, String, String) -> Array[Shell]
 
+pub fn current_eval_family() -> ShellFamily
+
 pub fn current_shells() -> Array[Shell]
 
 pub fn detect_shells(String, String, String, String?, (String) -> Bool) -> Array[Shell]
@@ -60,9 +62,15 @@ pub fn path_dirname(String) -> String
 
 pub fn path_join(String, String) -> String
 
+pub fn quote_csh(String) -> String
+
 pub fn quote_fish(String) -> String
 
+pub fn quote_nu(String) -> String
+
 pub fn quote_posix(String) -> String
+
+pub fn quote_ps(String) -> String
 
 pub fn remove_by_name(Array[Entry], String) -> (Array[Entry], Array[Entry])
 
@@ -120,6 +128,9 @@ pub(all) struct Shell {
 pub(all) enum ShellFamily {
   Posix
   Fish
+  Csh
+  Nu
+  PowerShell
 }
 
 // Type aliases

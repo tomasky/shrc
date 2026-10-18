@@ -13,7 +13,8 @@ test("maps every supported Node platform-arch to a release target", () => {
   assert.equal(lib.TARGETS["linux-x64"], "linux-x86_64");
   assert.equal(lib.TARGETS["linux-arm64"], "linux-aarch64");
   assert.equal(lib.TARGETS["darwin-arm64"], "darwin-aarch64");
-  assert.equal(Object.keys(lib.TARGETS).length, 3);
+  assert.equal(lib.TARGETS["win32-x64"], "windows-x86_64");
+  assert.equal(Object.keys(lib.TARGETS).length, 4);
 });
 
 test("resolves the repository slug from package.json", () => {
@@ -30,6 +31,21 @@ test("falls back from the pinned version to latest", () => {
   assert.equal(
     urls[1],
     "https://github.com/tomasky/shrc/releases/latest/download/shrc-linux-x86_64"
+  );
+});
+
+test("windows assets and cache entries carry the .exe suffix", () => {
+  assert.equal(lib.assetName("windows-x86_64"), "shrc-windows-x86_64.exe");
+  assert.equal(
+    lib.downloadUrls("windows-x86_64")[0],
+    `https://github.com/tomasky/shrc/releases/download/v${lib.version()}/shrc-windows-x86_64.exe`
+  );
+  assert.equal(
+    lib.binaryPath("windows-x86_64"),
+    path.join(
+      lib.cacheDir(),
+      `shrc-${lib.version()}-windows-x86_64.exe`
+    )
   );
 });
 

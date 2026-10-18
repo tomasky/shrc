@@ -49,6 +49,48 @@ jobs:
       - name: Test
         run: moon test --target native
 
+      # Release mode is a different code path; build it here so a tag is not
+      # the first place it is tried.
+      - name: Build (native, release)
+        run: moon build --target native --release
+
+  # The same release build the Windows artifact uses, so a tag is not the
+  # first time the MSVC toolchain path is exercised.
+  windows:
+    name: build on Windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install MoonBit
+        shell: pwsh
+        run: |
+          Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
+          irm https://cli.moonbitlang.com/install/powershell.ps1 | iex
+          "$env:USERPROFILE\.moon\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+
+      - name: Set up MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Show toolchain
+        run: moon version --all
+
+      - name: Update dependencies
+        run: moon update
+
+      - name: Check (warnings are errors)
+        run: moon check --target native --deny-warn
+
+      - name: Build (native, release)
+        run: moon build --target native --release
+
+      - name: Smoke test
+        shell: bash
+        run: |
+          set -eu
+          ./_build/native/release/build/cmd/shrc/shrc.exe version
+          ./_build/native/release/build/cmd/shrc/shrc.exe help >/dev/null
+
   shellcheck:
     name: lint install.sh
     runs-on: ubuntu-latest
@@ -81,3 +123,22 @@ jobs:
       - name: Unit tests
         working-directory: npmjs
         run: node --test
+
+      # The published files are listed in package.json; fail here rather than
+      # at publish time if one of them is missing.
+      - name: Verify the published tarball
+        working-directory: npmjs
+        run: npm pack --dry-run
+
+      # Drive the launcher without downloading anything: SHRC_BINARY makes it
+      # run the binary it is pointed at, so argument and exit-code forwarding
+      # is checked end to end.
+      - name: Launcher smoke test
+        working-directory: npmjs
+        run: |
+          set -eu
+          test "$(SHRC_BINARY=/bin/echo node bin/shrc.js hello)" = "hello"
+          if SHRC_BINARY=/bin/false node bin/shrc.js; then
+            echo "::error::the launcher must forward a non-zero exit code"
+            exit 1
+          fi

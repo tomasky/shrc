@@ -1,5 +1,8 @@
 # `@tomasko/shrc`
 
+[![npm](https://img.shields.io/npm/v/@tomasko/shrc.svg)](https://www.npmjs.com/package/@tomasko/shrc)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](https://github.com/tomasky/shrc/blob/master/LICENSE)
+
 The npm launcher for [`shrc`](https://github.com/tomasky/shrc) — manage
 environment variables and aliases across bash, zsh, fish and other shells from
 one command.
@@ -34,9 +37,11 @@ it. Nothing is downloaded at install time.
 | Linux x86-64 | `shrc-linux-x86_64` (static, musl) |
 | Linux arm64 | `shrc-linux-aarch64` (static, musl) |
 | macOS Apple silicon | `shrc-darwin-aarch64` |
+| Windows x86-64 | `shrc-windows-x86_64.exe` (MSVC) |
 
 The Linux builds are linked statically against musl, so they run on any
-distribution regardless of its glibc version.
+distribution regardless of its glibc version. The Windows build carries the
+`.exe` suffix in both the release and the local cache.
 
 ## Why there is no `postinstall`
 
@@ -91,6 +96,9 @@ SHRC_DOWNLOAD_BASE=https://internal.example.com/shrc npm install -g @tomasko/shr
 ```sh
 # Installer script (no Node.js required)
 curl -LsSf https://raw.githubusercontent.com/tomasky/shrc/master/install.sh | bash
+
+# From the MoonBit package registry
+moon install kupas/shrc/cmd/shrc
 
 # Build from source
 git clone https://github.com/tomasky/shrc && cd shrc

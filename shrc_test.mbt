@@ -35,13 +35,39 @@ test "quote_fish protects backslashes and single quotes" {
 }
 
 ///|
+test "quote_csh escapes history expansion and single quotes" {
+  assert_eq(@shrc.quote_csh("plain"), "'plain'")
+  assert_eq(@shrc.quote_csh("a!b"), "'a\\!b'")
+  assert_eq(@shrc.quote_csh("it's"), "'it'\\''s'")
+  assert_eq(@shrc.quote_csh(""), "''")
+}
+
+///|
+test "quote_nu escapes what nushell needs" {
+  assert_eq(@shrc.quote_nu("plain"), "\"plain\"")
+  assert_eq(@shrc.quote_nu("a\\b"), "\"a\\\\b\"")
+  assert_eq(@shrc.quote_nu("a\"b"), "\"a\\\"b\"")
+  assert_eq(@shrc.quote_nu("a\nb"), "\"a\\nb\"")
+}
+
+///|
+test "quote_ps doubles single quotes" {
+  assert_eq(@shrc.quote_ps("plain"), "'plain'")
+  assert_eq(@shrc.quote_ps("it's"), "'it''s'")
+}
+
+///|
 test "render_entry speaks each shell's syntax" {
   let env = @shrc.Entry::new(@shrc.Env, "FOO", "bar")
   let alias_entry = @shrc.Entry::new(@shrc.Alias, "ll", "ls -la")
   assert_eq(@shrc.render_entry(@shrc.Posix, env), "export FOO='bar'")
   assert_eq(@shrc.render_entry(@shrc.Fish, env), "set -gx FOO 'bar'")
+  assert_eq(@shrc.render_entry(@shrc.Csh, env), "setenv FOO 'bar'")
+  assert_eq(@shrc.render_entry(@shrc.Nu, env), "$env.FOO = \"bar\"")
+  assert_eq(@shrc.render_entry(@shrc.PowerShell, env), "$env:FOO = 'bar'")
   assert_eq(@shrc.render_entry(@shrc.Posix, alias_entry), "alias ll='ls -la'")
   assert_eq(@shrc.render_entry(@shrc.Fish, alias_entry), "alias ll 'ls -la'")
+  assert_eq(@shrc.render_entry(@shrc.Csh, alias_entry), "alias ll 'ls -la'")
 }
 
 ///|
@@ -50,11 +76,21 @@ test "render_remove unsets and unaliases" {
   let alias_entry = @shrc.Entry::new(@shrc.Alias, "ll", "ls -la")
   assert_eq(@shrc.render_remove(@shrc.Posix, env), "unset FOO")
   assert_eq(@shrc.render_remove(@shrc.Fish, env), "set -e FOO")
+  assert_eq(@shrc.render_remove(@shrc.Csh, env), "unsetenv FOO")
+  assert_true(@shrc.render_remove(@shrc.Nu, env).contains("hide-env FOO"))
+  assert_true(
+    @shrc.render_remove(@shrc.PowerShell, env).contains("Remove-Item Env:FOO"),
+  )
   assert_true(
     @shrc.render_remove(@shrc.Posix, alias_entry).contains("unalias ll"),
   )
   assert_true(
     @shrc.render_remove(@shrc.Fish, alias_entry).contains("functions -e ll"),
+  )
+  assert_true(
+    @shrc.render_remove(@shrc.PowerShell, alias_entry).contains(
+      "Remove-Item Function:ll",
+    ),
   )
 }
 
@@ -187,15 +223,27 @@ test "sync_block removes the block when there are no entries" {
 ///|
 test "candidate_shells lays out every startup file" {
   let shells = @shrc.candidate_shells("/home/u", "/home/u/.config", "/home/u")
-  assert_eq(shells.length(), 4)
+  assert_eq(shells.length(), 18)
   assert_eq(shells[0].name, "profile")
   assert_eq(shells[0].rc, "/home/u/.profile")
   assert_eq(shells[1].name, "bash")
   assert_eq(shells[1].rc, "/home/u/.bashrc")
-  assert_eq(shells[2].name, "zsh")
-  assert_eq(shells[2].rc, "/home/u/.zshrc")
-  assert_eq(shells[3].name, "fish")
-  assert_eq(shells[3].rc, "/home/u/.config/fish/config.fish")
+  assert_eq(shells[4].name, "zsh")
+  assert_eq(shells[4].rc, "/home/u/.zshrc")
+  assert_eq(shells[9].name, "fish")
+  assert_eq(shells[9].rc, "/home/u/.config/fish/config.fish")
+  assert_true(shells[9].family is Fish)
+  assert_true(shells[10].family is Csh)
+  assert_eq(shells[13].name, "nu")
+  assert_true(shells[13].family is Nu)
+  assert_true(shells[15].family is PowerShell)
+  // Every startup file is distinct, so one shell's block never shadows
+  // another's.
+  let seen = []
+  for candidate in shells {
+    assert_false(seen.contains(candidate.rc))
+    seen.push(candidate.rc)
+  }
 }
 
 ///|
@@ -231,6 +279,28 @@ test "detect_shells follows the login shell and existing files" {
   )
   assert_eq(fallback.length(), 1)
   assert_eq(fallback[0].name, "profile")
+}
+
+///|
+test "detect_shells covers every existing file without duplicates" {
+  let all = fn(_path : String) { true }
+  let shells = @shrc.detect_shells(
+    "/home/u",
+    "/home/u/.config",
+    "/home/u",
+    None,
+    all,
+  )
+  assert_eq(shells.length(), 18)
+  // A login shell already listed as an existing file is not added twice.
+  let with_login = @shrc.detect_shells(
+    "/home/u",
+    "/home/u/.config",
+    "/home/u",
+    Some("/bin/bash"),
+    all,
+  )
+  assert_eq(with_login.length(), 18)
 }
 
 ///|

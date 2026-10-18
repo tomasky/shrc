@@ -101,8 +101,24 @@ case "$os-$arch" in
   Darwin-x86_64)
     err "unsupported platform: $os-$arch — the MoonBit toolchain no longer ships a darwin-x86_64 target, so no Intel macOS build is published"
     ;;
+  # Git Bash, MSYS2 and Cygwin on 64-bit Windows can run this script; the
+  # installed command is still the native shrc.exe.
+  MINGW64_NT-*-x86_64 | UCRT64_NT-*-x86_64 | CLANG64_NT-*-x86_64 | MSYS_NT-*-x86_64 | CYGWIN_NT-*-x86_64)
+    target="windows-x86_64"
+    ;;
   *)
-    err "unsupported platform: $os-$arch (shrc publishes linux-x86_64, linux-aarch64 and darwin-aarch64)"
+    err "unsupported platform: $os-$arch (shrc publishes linux-x86_64, linux-aarch64, darwin-aarch64 and windows-x86_64)"
+    ;;
+esac
+
+# --- asset name ------------------------------------------------------------
+# Windows release assets carry an `.exe` suffix, and the installed command is
+# `shrc.exe` so cmd.exe and PowerShell resolve `shrc` through PATHEXT.
+asset="shrc-$target"
+case "$target" in
+  windows-*)
+    asset="$asset.exe"
+    BIN="$BIN.exe"
     ;;
 esac
 
@@ -125,21 +141,38 @@ path_contains() {
   esac
 }
 
+# A directory the binary can actually be installed into: it exists and is
+# writable, or it can be created.
+dir_usable() {
+  if [ -d "$1" ]; then
+    [ -w "$1" ]
+  else
+    mkdir -p "$1" 2>/dev/null && [ -w "$1" ]
+  fi
+}
+
 if [ -z "$install_dir" ]; then
   for candidate in "$HOME/.local/bin" "$HOME/bin" "/usr/local/bin"; do
-    if path_contains "$candidate"; then
+    if path_contains "$candidate" && dir_usable "$candidate"; then
       install_dir="$candidate"
       break
     fi
   done
 fi
-[ -n "$install_dir" ] || install_dir="$HOME/.shrc/bin"
+if [ -n "$install_dir" ]; then
+  dir_usable "$install_dir" ||
+    err "cannot install into '$install_dir' (set SHRC_INSTALL_DIR to a writable directory)"
+else
+  install_dir="$HOME/.shrc/bin"
+  dir_usable "$install_dir" ||
+    err "cannot create '$install_dir' (set SHRC_INSTALL_DIR to a writable directory)"
+fi
 
 # --- shell startup file ----------------------------------------------------
 shell_name="$(basename "${SHELL:-sh}")"
 
 profile_file() {
-  case "$(basename "${SHELL:-sh}")" in
+  case "$shell_name" in
     bash)
       if [ -f "$HOME/.bashrc" ]; then
         printf '%s' "$HOME/.bashrc"
@@ -164,8 +197,10 @@ profile_file() {
 add_to_path() {
   local dir="$1" profile="$2"
   [ "$modify_path" = 1 ] || return 0
-  if [ -f "$profile" ] && grep -qF "$PATH_MARKER" "$profile" 2>/dev/null; then
-    say "shrc: $profile already sets up shrc; leaving it alone"
+  # Look for this exact directory, not just our marker: a reinstall into a
+  # different directory must not be skipped.
+  if [ -f "$profile" ] && grep -qF "$dir" "$profile" 2>/dev/null; then
+    say "shrc: $profile already sets up $dir; leaving it alone"
     return 0
   fi
   mkdir -p "$(dirname "$profile")"
@@ -190,7 +225,6 @@ else
   base="https://github.com/$REPO/releases/latest/download"
 fi
 
-asset="shrc-$target"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
@@ -257,11 +291,17 @@ was_sourced() {
 
 if ! path_contains "$install_dir" && was_sourced; then
   export PATH="$install_dir:$PATH"
+  # The shell may have cached command lookups; drop them so `shrc` resolves
+  # right now rather than at the next shell.
+  hash -r 2>/dev/null || true
   say "shrc: PATH updated for the current shell"
 fi
 
 say ""
-"$install_dir/$BIN" version 2>/dev/null || true
+if ! installed_version="$("$install_dir/$BIN" version 2>/dev/null)"; then
+  err "installed $install_dir/$BIN but it failed to run"
+fi
+say "$installed_version"
 say ""
 say "shrc: manage environment variables and aliases with:"
 say "  shrc set EDITOR vim"

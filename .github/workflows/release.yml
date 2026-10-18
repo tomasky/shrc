@@ -33,22 +33,41 @@ jobs:
           # start on older systems ("GLIBC_2.38 not found").
           - runner: ubuntu-latest
             target: linux-x86_64
+            asset: shrc-linux-x86_64
             musl: true
           # GitHub's arm64 Linux runners are only available to public
           # repositories. Remove this entry if that is a problem.
           - runner: ubuntu-24.04-arm
             target: linux-aarch64
+            asset: shrc-linux-aarch64
             musl: true
           - runner: macos-15
             target: darwin-aarch64
+            asset: shrc-darwin-aarch64
+            musl: false
+          # Windows release builds compile through the C backend, which needs
+          # an MSVC cl-compatible toolchain; `ilammy/msvc-dev-cmd` initialises
+          # the environment so `cl.exe` is on PATH.
+          - runner: windows-latest
+            target: windows-x86_64
+            asset: shrc-windows-x86_64.exe
             musl: false
     steps:
       - uses: actions/checkout@v5
 
       - name: Install MoonBit
+        if: runner.os != 'Windows'
         run: |
           curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
           echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
+
+      - name: Install MoonBit on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
+          irm https://cli.moonbitlang.com/install/powershell.ps1 | iex
+          "$env:USERPROFILE\.moon\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
 
       - name: Show toolchain
         run: moon version --all
@@ -59,6 +78,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y musl-tools
 
+      - name: Set up MSVC
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
       # A fresh runner has an empty registry index, so dependencies
       # (moonbitlang/x, ...) cannot be resolved until the index is fetched.
       - name: Update registry index
@@ -66,15 +89,23 @@ jobs:
 
       - name: Build (static, release)
         if: matrix.musl
-        run: ./scripts/build-linux-static.sh "dist/shrc-${{ matrix.target }}"
+        run: ./scripts/build-linux-static.sh "dist/${{ matrix.asset }}"
 
       - name: Build (release)
-        if: ${{ !matrix.musl }}
+        if: ${{ !matrix.musl && runner.os != 'Windows' }}
         run: |
           moon build --target native --release
           mkdir -p dist
-          cp _build/native/release/build/cmd/shrc/shrc.exe "dist/shrc-${{ matrix.target }}"
-          chmod 755 "dist/shrc-${{ matrix.target }}"
+          cp _build/native/release/build/cmd/shrc/shrc.exe "dist/${{ matrix.asset }}"
+          chmod 755 "dist/${{ matrix.asset }}"
+
+      - name: Build (release) on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          moon build --target native --release
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Copy-Item _build/native/release/build/cmd/shrc/shrc.exe "dist/${{ matrix.asset }}"
 
       # Only two assets per target: the binary and its checksum. Both the
       # npm launcher and install.sh fetch the bare asset and set the mode
@@ -82,26 +113,28 @@ jobs:
       # nothing would read it. GitHub already offers "Source code (tar.gz)"
       # for anyone who wants an archive of the tag.
       - name: Stage assets
+        shell: bash
         run: |
           set -eu
-          asset="shrc-${{ matrix.target }}"
+          asset="${{ matrix.asset }}"
           file "dist/$asset" || true
           (cd dist && shasum -a 256 "$asset" > "$asset.sha256" 2>/dev/null \
             || sha256sum "$asset" > "$asset.sha256")
           ls -l dist
 
       - name: Smoke test
+        shell: bash
         run: |
           set -eu
-          "./dist/shrc-${{ matrix.target }}" version
-          "./dist/shrc-${{ matrix.target }}" help >/dev/null
+          "./dist/${{ matrix.asset }}" version
+          "./dist/${{ matrix.asset }}" help >/dev/null
 
       - uses: actions/upload-artifact@v4
         with:
-          name: shrc-${{ matrix.target }}
+          name: ${{ matrix.asset }}
           path: |
-            dist/shrc-${{ matrix.target }}
-            dist/shrc-${{ matrix.target }}.sha256
+            dist/${{ matrix.asset }}
+            dist/${{ matrix.asset }}.sha256
           if-no-files-found: error
 
   release:

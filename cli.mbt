@@ -157,9 +157,9 @@ fn kind_matches(filter : EntryKind?, kind : EntryKind) -> Bool {
 }
 
 ///|
-/// The statement that applies `entry` to the shell named by `$SHELL`.
+/// The statement that applies `entry` to the shell that is evaluating it.
 fn apply_statement(entry : Entry) -> String {
-  render_apply(eval_family(@env.get_env_var("SHELL")), entry)
+  render_apply(current_eval_family(), entry)
 }
 
 ///|
@@ -239,7 +239,7 @@ fn cmd_rm(args : Array[String]) -> CliResult {
   let errors = apply_to_shells(remaining, shells)
   let statements = []
   if !flags.quiet {
-    let family = eval_family(@env.get_env_var("SHELL"))
+    let family = current_eval_family()
     for entry in removed {
       statements.push(render_remove(family, entry))
     }
