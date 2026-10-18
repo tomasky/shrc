@@ -133,7 +133,8 @@ shrc ls                        # list managed entries
 shrc ls EDIT                   # filter by name
 shrc ls PATH                   # search paths, one directory per row, in order
 shrc all                       # the manifest and every startup file
-shrc init                      # report what the startup files already define (--apply to adopt)
+shrc init                      # import existing definitions (files untouched)
+shrc refresh                   # re-scan and sync the manifest with the files
 shrc version
 shrc help
 ```
@@ -214,6 +215,22 @@ original definitions stay where they are, and only `shrc set`/`shrc rm` rewrite
 the managed block. A definition whose value uses shell syntax shrc cannot
 translate (command substitutions, backticks, escapes) is skipped. `shrc init -n`
 reports what it would import without writing the manifest.
+
+`shrc refresh` re-scans and syncs the manifest: new definitions are imported,
+manually edited values overwrite the stored value (the file is the source of
+truth for imported entries), and entries no longer present in the files stay
+tracked until `shrc rm`. Files are never modified by `init`/`refresh`.
+
+### In-place vs. managed entries
+
+* An entry adopted from a startup file is **imported**: it stays in its
+  original place. `shrc set NAME value` edits that line in place;
+  `shrc rm NAME` removes it.
+* An entry created by `shrc set` on a name that does not yet exist is
+  **managed**: it lives in the `>>> shrc >>>` block, and `shrc set`/`shrc rm`
+  rewrite the block.
+* `shrc ls` shows both kinds; the manifest marks imported ones with the
+  `imported` flag (`env	imported,raw,list	PATH	...`).
 
 ## How it works
 

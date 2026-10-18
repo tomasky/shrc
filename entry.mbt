@@ -38,18 +38,19 @@ pub(all) struct Entry {
   value : String
   raw : Bool
   list : Bool
+  imported : Bool
 }
 
 ///|
 /// Build a literal entry.
 pub fn Entry::new(kind : EntryKind, name : String, value : String) -> Entry {
-  { kind, name, value, raw: false, list: false, }
+  { kind, name, value, raw: false, list: false, imported: false, }
 }
 
 ///|
 /// Build an entry whose value stays live shell syntax (`$VAR`, backticks).
 pub fn Entry::new_raw(kind : EntryKind, name : String, value : String) -> Entry {
-  { kind, name, value, raw: true, list: false, }
+  { kind, name, value, raw: true, list: false, imported: false, }
 }
 
 ///|
@@ -60,8 +61,9 @@ pub fn Entry::new_full(
   value : String,
   raw : Bool,
   list : Bool,
+  imported~ : Bool = false,
 ) -> Entry {
-  { kind, name, value, raw, list, }
+  { kind, name, value, raw, list, imported, }
 }
 
 ///|
@@ -71,7 +73,8 @@ pub fn entry_eq(a : Entry, b : Entry) -> Bool {
   a.name == b.name &&
   a.value == b.value &&
   a.raw == b.raw &&
-  a.list == b.list
+  a.list == b.list &&
+  a.imported == b.imported
 }
 
 ///|
@@ -152,15 +155,17 @@ pub fn unescape_field(text : String) -> String {
 /// The attribute field of a manifest line: empty, or a comma-separated list of
 /// `raw` (the value stays live shell syntax) and `list` (a search path).
 fn entry_flags(entry : Entry) -> String {
-  if entry.raw && entry.list {
-    "raw,list"
-  } else if entry.raw {
-    "raw"
-  } else if entry.list {
-    "list"
-  } else {
-    ""
+  let parts = []
+  if entry.raw {
+    parts.push("raw")
   }
+  if entry.list {
+    parts.push("list")
+  }
+  if entry.imported {
+    parts.push("imported")
+  }
+  parts.join(",")
 }
 
 ///|
@@ -194,11 +199,14 @@ pub fn entry_of_line(line : String) -> Entry? {
   if parts.length() >= 4 {
     let mut raw = false
     let mut list = false
+    let mut imported = false
     for flag in parts[1].split(",") {
       if flag == "raw" {
         raw = true
       } else if flag == "list" {
         list = true
+      } else if flag == "imported" {
+        imported = true
       }
     }
     return Some(
@@ -208,6 +216,7 @@ pub fn entry_of_line(line : String) -> Entry? {
         unescape_field(parts[3].to_owned()),
         raw,
         list,
+        imported~,
       ),
     )
   }

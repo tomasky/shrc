@@ -12,6 +12,7 @@ npm install -g @tomasko/shrc
 shrc set EDITOR vim
 shrc set -a ll 'ls -la'
 shrc init            # import existing definitions into `shrc ls` (files untouched)
+shrc refresh         # re-scan and sync the manifest with the files
 shrc ls              # search paths are listed one directory per row
 shrc all
 ```
@@ -64,7 +65,7 @@ dependency declares one:
 $ pnpm add @tomasko/shrc
 Error: ERR_PNPM_IGNORED_BUILDS
   × adding a new package
-  ╰─▶ Ignored build scripts: @tomasko/shrc@0.1.4
+  ╰─▶ Ignored build scripts: @tomasko/shrc@0.1.5
 ```
 
 Downloading lazily from `bin/shrc.js` sidesteps all of it: it works under npm,

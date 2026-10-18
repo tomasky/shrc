@@ -31,11 +31,19 @@ pub fn save_entries(entries : Array[Entry]) -> Result[Unit, String] {
 /// Write `entries` into every startup file in `shells`.
 ///
 /// Returns one human-readable message per file that could not be written; an
-/// empty array means everything succeeded.
+/// empty array means everything succeeded. Imported entries (adopted from the
+/// startup files) are left in place and are not rendered into the managed
+/// block, so only entries added by `shrc set` live there.
 pub fn apply_to_shells(
   entries : Array[Entry],
   shells : Array[Shell],
 ) -> Array[String] {
+  let managed = []
+  for entry in entries {
+    if !entry.imported {
+      managed.push(entry)
+    }
+  }
   let errors = []
   for shell in shells {
     let exists = @fs.path_exists(shell.rc)
@@ -46,7 +54,7 @@ pub fn apply_to_shells(
     } else {
       ""
     }
-    let updated = sync_block(existing, shell.family, entries)
+    let updated = sync_block(existing, shell.family, managed)
     // Removing the last entry leaves an empty block, and an empty block in a
     // file that never existed should not create one.
     if exists || updated.length() > 0 {

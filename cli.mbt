@@ -38,15 +38,18 @@ pub fn help_text() -> String {
     "  shrc set [-a|--alias] [-q|--quiet] NAME VALUE", "  shrc set [-a|--alias] [-q|--quiet] NAME=VALUE",
     "  shrc set [-p|--prepend | --append | --drop] [-q|--quiet] NAME VALUE", "  shrc set [-r|--raw] [-q|--quiet] NAME VALUE",
     "  shrc rm  [-a|--alias] [-q|--quiet] NAME", "  shrc ls  [NAME]", "  shrc all",
-    "  shrc init [-n|--dry-run] [-q|--quiet]", "  shrc version", "  shrc help", "",
-    "Commands:", "  set   Add or update an environment variable (default) or an alias in",
+    "  shrc init [-n|--dry-run] [-q|--quiet]", "  shrc refresh [-n|--dry-run] [-q|--quiet]",
+    "  shrc version", "  shrc help", "", "Commands:", "  set   Add or update an environment variable (default) or an alias in",
     "        every detected startup file (~/.profile, ~/.bashrc, ~/.zshrc,", "        ~/.config/fish/config.fish). Prints the statement to eval so the",
     "        change also applies to the current shell. A search-path variable", "        (PATH, PYTHONPATH, LD_LIBRARY_PATH, ...) is stored as an ordered",
     "        list: a directory on its own is prepended, --append puts it last.",
     "  rm    Remove every entry named NAME.", "  ls    List managed entries, optionally filtered by NAME. A search path",
     "        is listed as one row per directory, in search order.", "  all   Show the full managed configuration and every startup file.",
-    "  init  Import the environment variables and aliases the detected startup",
-    "        files already define: they become managed entries and move into", "        the shrc block. The installer runs this on a first install.",
+    "  init     Import what the startup files already define into the manifest,",
+    "           so `shrc ls` shows them. Files are not modified. `refresh` is", "           an alias. Use `shrc init -n` to preview without writing.",
+    "  refresh  Re-scan the startup files and sync the manifest with them (same",
+    "           as `init`): new definitions are imported, manually edited ones",
+    "           overwrite the stored value, removed ones stay tracked until", "           `shrc rm`. Files are not modified.",
     "", "Options:", "  -a, --alias   Operate on an alias instead of an environment variable.",
     "  -e, --env     Operate on an environment variable (the default).", "  -q, --quiet   Print neither the statement nor the summary.",
     "  -p, --prepend add a directory at the front of a search path.", "      --append  add a directory at the end of a search path.",
@@ -215,6 +218,10 @@ fn set_entry(
     Some(entry) => entry.raw
     None => true
   }
+  let was_imported = match existing {
+    Some(entry) => entry.imported
+    None => false
+  }
   if flags.drop {
     match existing {
       None => Ok({ entry: None, note: "no entry named \{name}", })
@@ -231,6 +238,7 @@ fn set_entry(
                 updated,
                 entry.raw,
                 entry.list,
+                imported=entry.imported,
               ),
             ),
             note: "dropped \{value} from \{name}",
@@ -243,7 +251,16 @@ fn set_entry(
     let updated = path_insert(root, value, flags.append_dir)
     let verb = if flags.append_dir { "appended" } else { "prepended" }
     Ok({
-      entry: Some(Entry::new_full(Env, name, updated, was_raw, true)),
+      entry: Some(
+        Entry::new_full(
+          Env,
+          name,
+          updated,
+          was_raw,
+          true,
+          imported=was_imported,
+        ),
+      ),
       note: "\{verb} \{value} to \{name}",
     })
   } else if flags.raw {
@@ -259,7 +276,14 @@ fn set_entry(
         })
       Ok({
         entry: Some(
-          Entry::new_full(Env, name, canonical_list(name, value), true, list),
+          Entry::new_full(
+            Env,
+            name,
+            canonical_list(name, value),
+            true,
+            list,
+            imported=was_imported,
+          ),
         ),
         note: "",
       })
@@ -278,7 +302,14 @@ fn set_entry(
       } else {
         Ok({
           entry: Some(
-            Entry::new_full(Env, name, canonical_list(name, value), true, true),
+            Entry::new_full(
+              Env,
+              name,
+              canonical_list(name, value),
+              true,
+              true,
+              imported=was_imported,
+            ),
           ),
           note: "",
         })
@@ -286,7 +317,14 @@ fn set_entry(
     } else if value.contains(":") || value.contains(";") {
       Ok({
         entry: Some(
-          Entry::new_full(Env, name, canonical_list(name, value), false, true),
+          Entry::new_full(
+            Env,
+            name,
+            canonical_list(name, value),
+            false,
+            true,
+            imported=was_imported,
+          ),
         ),
         note: "",
       })
@@ -294,12 +332,26 @@ fn set_entry(
       let root = if base.length() > 0 { base } else { self_ref(name) }
       let updated = path_insert(root, value, false)
       Ok({
-        entry: Some(Entry::new_full(Env, name, updated, was_raw, true)),
+        entry: Some(
+          Entry::new_full(
+            Env,
+            name,
+            updated,
+            was_raw,
+            true,
+            imported=was_imported,
+          ),
+        ),
         note: "prepended \{value} to \{name}",
       })
     }
   } else {
-    Ok({ entry: Some(Entry::new(kind, name, value)), note: "", })
+    Ok({
+      entry: Some(
+        Entry::new_full(kind, name, value, false, false, imported=was_imported),
+      ),
+      note: "",
+    })
   }
 }
 
@@ -364,6 +416,26 @@ fn cmd_set(args : Array[String]) -> CliResult {
     Err(message) => return failure("shrc: \{message}")
   }
   let shells = current_shells()
+  // An imported entry keeps its original place in the startup files: edit it
+  // in place instead of moving it into the managed block.
+  if entry.imported {
+    for shell in shells {
+      if @fs.path_exists(shell.rc) {
+        let text = @fs.read_file_to_string(shell.rc) catch { _ => "" }
+        let (updated, changed) = edit_definition_in_text(
+          text,
+          shell.family,
+          entry.name,
+          Some(render_entry(shell.family, entry)),
+        )
+        if changed {
+          @fs.write_string_to_file(shell.rc, updated) catch {
+            _ => ()
+          }
+        }
+      }
+    }
+  }
   let errors = apply_to_shells(entries, shells)
   let out = if flags.quiet { "" } else { apply_statement(entry) }
   let notes = []
@@ -412,6 +484,27 @@ fn cmd_rm(args : Array[String]) -> CliResult {
     Err(message) => return failure("shrc: \{message}")
   }
   let shells = current_shells()
+  // Imported entries live in their original place: remove the definition there.
+  for entry in removed {
+    if entry.imported {
+      for shell in shells {
+        if @fs.path_exists(shell.rc) {
+          let text = @fs.read_file_to_string(shell.rc) catch { _ => "" }
+          let (updated, changed) = edit_definition_in_text(
+            text,
+            shell.family,
+            entry.name,
+            None,
+          )
+          if changed {
+            @fs.write_string_to_file(shell.rc, updated) catch {
+              _ => ()
+            }
+          }
+        }
+      }
+    }
+  }
   let errors = apply_to_shells(remaining, shells)
   let statements = []
   if !flags.quiet {
@@ -648,7 +741,7 @@ pub fn dispatch(args : Array[String]) -> CliResult {
     "rm" | "remove" | "unset" | "delete" => cmd_rm(rest)
     "ls" | "list" => cmd_ls(rest)
     "all" => cmd_all(rest)
-    "init" => cmd_init(rest)
+    "init" | "refresh" => cmd_init(rest)
     "version" | "--version" | "-v" => ok("shrc \{shrc_version}")
     "help" | "--help" | "-h" => ok(help_text())
     _ => failure("shrc: unknown command '\{command}'\n\n" + help_text())

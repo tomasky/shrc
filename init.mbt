@@ -300,7 +300,14 @@ fn parse_rhs(rhs : String) -> ValueForm {
 /// a list so rendering can use the family's separator and `shrc ls` can show
 /// each directory on its own row.
 fn env_entry(name : String, value : String, raw : Bool) -> Entry {
-  Entry::new_full(Env, name, value, raw, is_search_path_name(name))
+  Entry::new_full(
+    Env,
+    name,
+    value,
+    raw,
+    is_search_path_name(name),
+    imported=true,
+  )
 }
 
 ///|
@@ -372,7 +379,8 @@ fn scan_alias_value(name : String, rhs : String) -> LineScan {
     return Retain
   }
   match alias_word_text(rhs) {
-    Some(value) => Adopt(Entry::new(Alias, name, value))
+    Some(value) =>
+      Adopt(Entry::new_full(Alias, name, value, false, false, imported=true))
     None => Retain
   }
 }
@@ -470,7 +478,9 @@ fn alias_list_line(rest : String) -> LineScan {
   if parts.length() == 0 {
     return Ignore
   }
-  Adopt(Entry::new(Alias, name, parts.join(" ")))
+  Adopt(
+    Entry::new_full(Alias, name, parts.join(" "), false, false, imported=true),
+  )
 }
 
 ///|
@@ -663,7 +673,7 @@ fn nu_alias(rest : String) -> LineScan {
       if value.contains("#") || value.contains(";") || value.contains("\\") {
         return Retain
       }
-      Adopt(Entry::new(Alias, name, value))
+      Adopt(Entry::new_full(Alias, name, value, false, false, imported=true))
     }
   }
 }
@@ -1154,18 +1164,84 @@ pub fn merge_candidates(
   let mut duplicates = 0
   let mut conflicts = 0
   for candidate in candidates {
-    match find_entry(entries, candidate) {
-      Some(previous) =>
-        if entry_eq(previous, candidate) {
-          duplicates = duplicates + 1
-        } else {
-          conflicts = conflicts + 1
-        }
-      None => {
-        entries.push(candidate)
-        imported.push(candidate)
+    // find existing by kind+name
+    let mut found_index = -1
+    for i, existing in entries {
+      if kind_eq(existing.kind, candidate.kind) &&
+        existing.name == candidate.name {
+        found_index = i
+        break
       }
+    }
+    if found_index >= 0 {
+      let previous = entries[found_index]
+      if entry_eq(previous, candidate) {
+        duplicates = duplicates + 1
+      } else if previous.imported {
+        // The startup file is the source of truth for an imported entry:
+        // adopt the manually edited value instead of keeping the stale one.
+        entries[found_index] = Entry::new_full(
+          previous.kind,
+          previous.name,
+          candidate.value,
+          candidate.raw,
+          candidate.list || previous.list,
+          imported=true,
+        )
+      } else {
+        conflicts = conflicts + 1
+      }
+    } else {
+      entries.push(candidate)
+      imported.push(candidate)
     }
   }
   (duplicates, conflicts)
+}
+
+///|
+/// Replace the definition of `name` in `text` with `replacement` (or remove it
+/// when `replacement` is `None`). Returns the new text and whether anything
+/// changed. Leading indentation of the original line is preserved.
+pub fn edit_definition_in_text(
+  text : String,
+  family : ShellFamily,
+  name : String,
+  replacement : String?,
+) -> (String, Bool) {
+  let lines = split_lines(text)
+  let out = []
+  let mut changed = false
+  for line in lines {
+    let scan = scan_line(family, line)
+    let mut is_target = false
+    match scan {
+      Adopt(entry) => if entry.name == name { is_target = true }
+      _ => ()
+    }
+    if is_target {
+      changed = true
+      match replacement {
+        Some(new_text) => {
+          let indent = leading_indent(line)
+          out.push(indent + new_text)
+        }
+        None => ()
+      }
+    } else {
+      out.push(line)
+    }
+  }
+  let joined = if out.length() == 0 { "" } else { out.join("\n") + "\n" }
+  (joined, changed)
+}
+
+///|
+fn leading_indent(text : String) -> String {
+  let chars = text.to_array()
+  let mut i = 0
+  while i < chars.length() && (chars[i] == ' ' || chars[i] == '\t') {
+    i = i + 1
+  }
+  text.view(end_offset=i).to_owned()
 }

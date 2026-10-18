@@ -168,11 +168,13 @@ test "dispatch init adopts existing definitions" {
   }
   // the manifest holds the adopted entries
   assert_eq(first.code, 0)
-  assert_true(manifest_text.contains("alias\tll\tls -alF"))
+  assert_true(manifest_text.contains("alias\timported\tll\tls -alF"))
   assert_true(
-    manifest_text.contains("env\traw,list\tPATH\t$HOME/.local/bin:$PATH"),
+    manifest_text.contains(
+      "env\traw,list,imported\tPATH\t$HOME/.local/bin:$PATH",
+    ),
   )
-  assert_true(manifest_text.contains("env\tEDITOR\tvim"))
+  assert_true(manifest_text.contains("env\timported\tEDITOR\tvim"))
   // the definitions moved out of the file and into the managed block
   // init does not touch the startup file: the original lines stay put
   assert_true(cleaned.contains("alias ll='ls -alF'"))
