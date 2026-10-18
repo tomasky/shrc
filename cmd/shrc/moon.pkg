@@ -3,6 +3,7 @@
 import {
   "kupas/shrc" @lib,
   "moonbitlang/core/env",
+  "moonbitlang/x/fs",
   "moonbitlang/x/sys",
 }
 

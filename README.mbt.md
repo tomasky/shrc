@@ -151,6 +151,43 @@ for bash and zsh, `set -gx`/`alias` for fish, `setenv` for csh/tcsh,
 `$env.X = ...` for nushell, and `$env:X = ...` for PowerShell. A summary goes
 to standard error, so it never pollutes an `eval`.
 
+### Applying changes to the current shell automatically
+
+`shrc` itself cannot change its parent shell's environment, so `eval` is the
+portable way. If you would rather not type it every time, add a small wrapper
+to your interactive startup file (`~/.bashrc`, `~/.zshrc`,
+`~/.config/fish/config.fish`); `.profile` only needs it when it is your login
+shell's file:
+
+```sh
+# bash / zsh / POSIX sh
+shrc() {
+  case "$1" in
+    set|rm|remove|unset|delete)
+      eval "$(command shrc "$@")"
+      ;;
+    *)
+      command shrc "$@"
+      ;;
+  esac
+}
+```
+
+```fish
+# fish
+function shrc
+  switch $argv[1]
+    case set rm remove unset delete
+      eval (command shrc $argv)
+    case '*'
+      command shrc $argv
+  end
+end
+```
+
+The installer adds this block for you (guarded by a marker, so it is never
+duplicated). For a manual install, paste it once.
+
 ### Search paths (PATH and friends)
 
 Variables that hold an ordered list of directories — `PATH`, `PYTHONPATH`,

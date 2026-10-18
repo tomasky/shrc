@@ -210,6 +210,29 @@ pub fn render_apply(family : ShellFamily, entry : Entry) -> String {
 }
 
 ///|
+/// A block that defines a `shrc` shell function which applies `set`/`rm`
+/// to the current shell automatically. Returns an empty string for families
+/// where no integration is provided.
+pub fn shell_integration_block(family : ShellFamily) -> String {
+  match family {
+    Posix =>
+      [
+        "# >>> shrc shell integration >>>", "shrc() {", "  case \"$1\" in", "    set|rm|remove|unset|delete)",
+        "      eval \"$(command shrc \"$@\")\"", "      ;;", "    *)", "      command shrc \"$@\"",
+        "      ;;", "  esac", "}", "# <<< shrc shell integration <<<", "",
+      ].join("\n")
+    Fish =>
+      [
+        "# >>> shrc shell integration >>>", "function shrc", "  switch $argv[1]",
+        "    case set rm remove unset delete", "      eval (command shrc $argv)",
+        "    case '*'", "      command shrc $argv", "  end", "end", "# <<< shrc shell integration <<<",
+        "",
+      ].join("\n")
+    _ => ""
+  }
+}
+
+///|
 /// The statement that removes `entry` from the shell that evaluates it.
 pub fn render_remove(family : ShellFamily, entry : Entry) -> String {
   match family {

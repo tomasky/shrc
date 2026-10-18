@@ -227,6 +227,54 @@ add_to_path() {
   say "shrc: added $dir to PATH in $profile"
 }
 
+# Add a small wrapper so `shrc set` / `shrc rm` apply to the current shell
+# without an explicit `eval`. Guarded by a marker so reinstalling never
+# duplicates it. Only the startup file this install already touches gets it;
+# `.profile` is covered when it is the login shell's file.
+add_shell_integration() {
+  local profile="$1"
+  [ "$modify_path" = 1 ] || return 0
+  if [ -f "$profile" ] && grep -qF "shrc shell integration" "$profile" 2>/dev/null; then
+    return 0
+  fi
+  mkdir -p "$(dirname "$profile")"
+  case "$profile" in
+    */config.fish)
+      cat >>"$profile" <<'EOF'
+
+# >>> shrc shell integration >>>
+function shrc
+  switch $argv[1]
+    case set rm remove unset delete
+      eval (command shrc $argv)
+    case '*'
+      command shrc $argv
+  end
+end
+# <<< shrc shell integration <<<
+EOF
+      ;;
+    *)
+      cat >>"$profile" <<'EOF'
+
+# >>> shrc shell integration >>>
+shrc() {
+  case "$1" in
+    set|rm|remove|unset|delete)
+      eval "$(command shrc "$@")"
+      ;;
+    *)
+      command shrc "$@"
+      ;;
+  esac
+}
+# <<< shrc shell integration <<<
+EOF
+      ;;
+  esac
+  say "shrc: added shell integration to $profile"
+}
+
 # --- resolve base URL ------------------------------------------------------
 if [ -n "${SHRC_DOWNLOAD_BASE:-}" ]; then
   base="${SHRC_DOWNLOAD_BASE%/}"
@@ -276,6 +324,7 @@ say "shrc: installed $install_dir/$BIN"
 # script is *sourced* rather than piped, it can update the current shell too.
 if ! path_contains "$install_dir"; then
   add_to_path "$install_dir" "$(profile_file)"
+  add_shell_integration "$(profile_file)"
   say ""
   if [ "$shell_name" = "fish" ]; then
     say "shrc: to start using it in this shell, run:"
@@ -309,6 +358,8 @@ if ! path_contains "$install_dir" && was_sourced; then
 fi
 
 say ""
+add_shell_integration "$(profile_file)"
+
 if ! installed_version="$("$install_dir/$BIN" version 2>/dev/null)"; then
   err "installed $install_dir/$BIN but it failed to run"
 fi

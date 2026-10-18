@@ -48,6 +48,8 @@ pub fn help_text() -> String
 
 pub fn home_dir() -> String
 
+pub fn install_shell_integration() -> Unit
+
 pub fn is_search_path_entry(Entry) -> Bool
 
 pub fn is_search_path_name(String) -> Bool
@@ -127,6 +129,8 @@ pub fn search_path_vars() -> Array[String]
 pub fn self_ref(String) -> String
 
 pub fn serialize_entries(Array[Entry]) -> String
+
+pub fn shell_integration_block(ShellFamily) -> String
 
 pub fn shrc_home() -> String
 

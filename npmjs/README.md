@@ -19,8 +19,10 @@ shrc all
 `shrc` writes a single managed block into each detected startup file
 (`~/.profile`, `~/.bashrc`, `~/.zshrc`, `~/.config/fish/config.fish`) and keeps
 the manifest in `~/.shrc`. Because the block is rewritten rather than appended
-to, running `shrc set` twice never duplicates a line. Use `eval` to apply a
-change to the current shell as well:
+to, running `shrc set` twice never duplicates a line. On a first run it also
+imports your existing configuration and installs a small shell wrapper so
+`shrc set`/`shrc rm` apply to the current shell automatically. Use `eval` if
+you prefer to do it manually:
 
 ```sh
 eval "$(shrc set EDITOR vim)"

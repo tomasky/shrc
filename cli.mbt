@@ -540,6 +540,9 @@ fn cmd_init(args : Array[String]) -> CliResult {
   } else {
     format_ls(imported).trim_end().to_owned()
   }
+  if !dry_run {
+    install_shell_integration()
+  }
   if !has_work || dry_run {
     return ok_with(out, notes.join("\n"))
   }
@@ -568,6 +571,9 @@ fn cmd_init(args : Array[String]) -> CliResult {
   for message in apply_to_shells(entries, shells) {
     errors.push(message)
   }
+  // Install the optional shell integration (auto-eval for set/rm) into every
+  // detected startup file, guarded by a marker so it is never duplicated.
+  install_shell_integration()
   for message in errors {
     notes.push("shrc: \{message}")
   }
@@ -575,6 +581,29 @@ fn cmd_init(args : Array[String]) -> CliResult {
     { code: 1, out, err: notes.join("\n"), }
   } else {
     ok_with(out, notes.join("\n"))
+  }
+}
+
+///|
+/// Append the optional shell integration (auto-eval for set/rm) to every
+/// detected startup file that does not already contain it. Safe to call on
+/// every run: it is guarded by a marker and never duplicates the block.
+pub fn install_shell_integration() -> Unit {
+  for shell in current_shells() {
+    let block = shell_integration_block(shell.family)
+    if block.length() > 0 && @fs.path_exists(shell.rc) {
+      let current = @fs.read_file_to_string(shell.rc) catch { _ => "" }
+      if !current.contains("shrc shell integration") {
+        let next = if current.length() == 0 {
+          block
+        } else {
+          current.trim_end().to_owned() + "\n\n" + block
+        }
+        @fs.write_string_to_file(shell.rc, next) catch {
+          _ => ()
+        }
+      }
+    }
   }
 }
 

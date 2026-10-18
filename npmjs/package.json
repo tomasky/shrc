@@ -1,6 +1,6 @@
 {
   "name": "@tomasko/shrc",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Manage environment variables and aliases across bash, zsh, fish and other shells — from one command.",
   "license": "Apache-2.0",
   "bin": {
