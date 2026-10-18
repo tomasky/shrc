@@ -1,0 +1,10 @@
+// shrc — manage environment variables and aliases across every shell.
+//
+// https://docs.moonbitlang.com/en/latest/toolchain/moon/package.html
+
+import {
+  "moonbitlang/core/env",
+  "moonbitlang/x/fs",
+}
+
+supported_targets = "+native"

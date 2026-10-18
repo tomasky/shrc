@@ -1,0 +1,50 @@
+{
+  "name": "@tomasko/shrc",
+  "version": "0.1.1",
+  "description": "Manage environment variables and aliases across bash, zsh, fish and other shells — from one command.",
+  "license": "Apache-2.0",
+  "bin": {
+    "shrc": "bin/shrc.js"
+  },
+  "files": [
+    "bin/shrc.js",
+    "lib.js",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "os": [
+    "darwin",
+    "linux"
+  ],
+  "cpu": [
+    "x64",
+    "arm64"
+  ],
+  "scripts": {
+    "test": "node --test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tomasky/shrc.git"
+  },
+  "homepage": "https://github.com/tomasky/shrc",
+  "bugs": "https://github.com/tomasky/shrc/issues",
+  "keywords": [
+    "shrc",
+    "shell",
+    "env",
+    "environment-variables",
+    "alias",
+    "aliases",
+    "bash",
+    "zsh",
+    "fish",
+    "dotfiles",
+    "profile",
+    "bashrc",
+    "moonbit"
+  ],
+  "preferGlobal": true
+}

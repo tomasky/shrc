@@ -1,0 +1,11 @@
+// The shrc command-line executable.
+
+import {
+  "kupas/shrc" @lib,
+  "moonbitlang/core/env",
+  "moonbitlang/x/sys",
+}
+
+supported_targets = "+native"
+
+pkgtype(kind: "executable")
