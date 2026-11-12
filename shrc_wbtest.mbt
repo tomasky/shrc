@@ -411,9 +411,21 @@ test "set_entry maintains a search path in order" {
   let once = Entry::new_full(Env, "PATH", "/opt/bin:$PATH", true, true)
   let again = set_changed(set_ok("PATH", "/opt/bin", prepend, Some(once)))
   assert_eq(again.value, "/opt/bin:$PATH")
-  let gone = set_changed(set_ok("PATH", "/opt/bin", drop, Some(once)))
-  assert_eq(gone.value, "$PATH")
-  assert_true(gone.list)
+  // Dropping the only real directory leaves nothing but `$PATH`, which would
+  // render as the no-op `export PATH="$PATH"`: the entry is removed whole and
+  // handed back so the live shell is unset too.
+  match set_entry(Env, "PATH", "/opt/bin", drop, Some(once)) {
+    Ok(outcome) => {
+      assert_true(outcome.entry is None)
+      assert_true(outcome.removed_entry is Some(_))
+      assert_true(outcome.note.contains("dropped"))
+    }
+    Err(message) => fail(message)
+  }
+  // With a real directory left over, the entry survives the drop.
+  let two = Entry::new_full(Env, "PATH", "/opt/bin:/usr/bin:$PATH", true, true)
+  let kept = set_changed(set_ok("PATH", "/opt/bin", drop, Some(two)))
+  assert_eq(kept.value, "/usr/bin:$PATH")
   // dropping something that is not there changes nothing
   match set_entry(Env, "PATH", "/nope", drop, Some(once)) {
     Ok(outcome) => {

@@ -8,13 +8,13 @@
 /// Return the directory part of `path` (everything before the last `/`).
 /// Returns `"."` when there is no separator.
 pub fn path_dirname(path : String) -> String {
-  let view = path.view()
+  let view = path.clamped_view()
   match view.rev_find("/") {
     Some(index) =>
       if index == 0 {
         "/"
       } else {
-        view.view(start_offset=0, end_offset=index).to_owned()
+        view.clamped_view(start=0, end=index).to_owned()
       }
     None => "."
   }
@@ -23,10 +23,10 @@ pub fn path_dirname(path : String) -> String {
 ///|
 /// Return the final component of `path`.
 pub fn path_basename(path : String) -> String {
-  let view = path.view()
+  let view = path.clamped_view()
   match view.rev_find("/") {
     Some(index) =>
-      view.view(start_offset=index + 1, end_offset=view.length()).to_owned()
+      view.clamped_view(start=index + 1, end=view.length()).to_owned()
     None => path
   }
 }
@@ -40,7 +40,7 @@ pub fn path_join(left : String, right : String) -> String {
   if right.length() == 0 {
     return left
   }
-  if left.view().has_suffix("/") {
+  if left.has_suffix("/") {
     "\{left}\{right}"
   } else {
     "\{left}/\{right}"

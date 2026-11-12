@@ -613,3 +613,56 @@ test "is_valid_alias_name allows punctuation but not metacharacters" {
   assert_false(@shrc.is_valid_alias_name("a|b"))
   assert_false(@shrc.is_valid_alias_name("a$(id)"))
 }
+
+///|
+test "is_empty_path spots a path that is only its own self-reference" {
+  // `/opt/x:$PATH` still means something after /opt/x is dropped.
+  assert_false(@shrc.is_empty_path("PATH", "/opt/x:$PATH"))
+  // Only the self-reference is left, so the variable says nothing.
+  assert_true(@shrc.is_empty_path("PATH", "$PATH"))
+  assert_true(@shrc.is_empty_path("PATH", ""))
+  // A self-reference plus a real directory is not empty.
+  assert_false(@shrc.is_empty_path("PATH", "$PATH:/usr/bin"))
+  // The reference has to name this variable, not another one.
+  assert_false(@shrc.is_empty_path("PATH", "$MANPATH"))
+}
+
+///|
+test "dropping the last directory leaves an empty, not a self-referential, path" {
+  let (left, removed) = @shrc.path_remove("/opt/x:$PATH", "/opt/x")
+  assert_true(removed)
+  assert_eq(left, "$PATH")
+  assert_true(@shrc.is_empty_path("PATH", left))
+}
+
+///|
+test "command_writes separates mutating commands from read-only ones" {
+  assert_true(@shrc.command_writes(["set", "FOO", "bar"]))
+  assert_true(@shrc.command_writes(["rm", "FOO"]))
+  assert_true(@shrc.command_writes(["init"]))
+  assert_true(@shrc.command_writes(["refresh"]))
+  assert_false(@shrc.command_writes(["ls"]))
+  assert_false(@shrc.command_writes(["all"]))
+  assert_false(@shrc.command_writes(["version"]))
+  assert_false(@shrc.command_writes(["help"]))
+  assert_false(@shrc.command_writes([]))
+}
+
+///|
+test "control characters are refused before they can corrupt a file" {
+  assert_false(@shrc.has_control_char("plain value"))
+  assert_false(@shrc.has_control_char("a b'c$d\"e\\f!g"))
+  assert_true(@shrc.has_control_char("a\nb"))
+  assert_true(@shrc.has_control_char("a\tb"))
+  assert_true(@shrc.has_control_char("a\rb"))
+  assert_true(@shrc.has_control_char("\u{7f}"))
+}
+
+///|
+test "is_valid_alias_name rejects a slash bash would refuse" {
+  // bash: `alias: 'a/b': invalid alias name`
+  assert_false(@shrc.is_valid_alias_name("a/b"))
+  // The punctuation every supported shell does accept stays allowed.
+  assert_true(@shrc.is_valid_alias_name("a@b"))
+  assert_true(@shrc.is_valid_alias_name("gs-1"))
+}

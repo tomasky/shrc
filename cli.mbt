@@ -63,6 +63,21 @@ pub fn help_text() -> String {
 }
 
 ///|
+/// Whether a value carries a control character (a newline, tab or other
+/// non-printing byte). Such a value cannot be written into every shell: csh
+/// has no way to quote a line break, so it is rejected at input instead of
+/// producing a broken startup file.
+pub fn has_control_char(value : String) -> Bool {
+  for ch in value.to_array() {
+    // Covers \n, \t, \r and every other non-printing character.
+    if ch.is_control() {
+      return true
+    }
+  }
+  false
+}
+
+///|
 /// A POSIX environment variable name: a letter or `_`, then letters, digits or
 /// `_`. Anything else would not be valid `export` syntax and could break the
 /// startup file it is written into.
@@ -112,8 +127,10 @@ pub fn is_valid_alias_name(name : String) -> Bool {
       ch == '%' ||
       ch == ',' ||
       ch == '+' ||
-      ch == '^' ||
-      ch == '/'
+      ch == '^'
+    // A `/` is deliberately not allowed: bash rejects `alias a/b=...` as an
+    // invalid alias name, so writing one would make the startup file print an
+    // error in the user's shell.
     if !ok {
       return false
     }
@@ -128,8 +145,8 @@ fn split_eq(text : String) -> (String, String)? {
     Some(index) =>
       Some(
         (
-          text.view(end_offset=index).to_owned(),
-          text.view(start_offset=index + 1).to_owned(),
+          text.clamped_view(end=index).to_owned(),
+          text.clamped_view(start=index + 1).to_owned(),
         ),
       )
     None => None
@@ -183,6 +200,20 @@ fn kind_matches(filter : EntryKind?, kind : EntryKind) -> Bool {
 }
 
 ///|
+/// Whether a command is going to write to the store. Only these trigger the
+/// one-time import of an existing configuration: a read-only command such as
+/// `shrc ls` must not create a manifest as a side effect.
+pub fn command_writes(args : Array[String]) -> Bool {
+  if args.length() == 0 {
+    return false
+  }
+  match args[0] {
+    "set" | "rm" | "remove" | "unset" | "delete" | "init" | "refresh" => true
+    _ => false
+  }
+}
+
+///|
 /// The statement that applies `entry` to the shell that is evaluating it.
 fn apply_statement(entry : Entry) -> String {
   render_apply(current_eval_family(), entry)
@@ -194,6 +225,9 @@ fn apply_statement(entry : Entry) -> String {
 priv struct SetOutcome {
   entry : Entry?
   note : String
+  /// Set when `--drop` removed the last real directory and the entry itself
+  /// is gone: the caller must unset it from the live shell as well.
+  removed_entry : Entry?
 }
 
 ///|
@@ -224,11 +258,25 @@ fn set_entry(
   }
   if flags.drop {
     match existing {
-      None => Ok({ entry: None, note: "no entry named \{name}", })
+      None =>
+        Ok({ entry: None, note: "no entry named \{name}", removed_entry: None, })
       Some(entry) => {
         let (updated, removed) = path_remove(entry.value, value)
         if !removed {
-          Ok({ entry: None, note: "\{value} is not in \{name}", })
+          Ok({
+            entry: None,
+            note: "\{value} is not in \{name}",
+            removed_entry: None,
+          })
+        } else if is_empty_path(entry.name, updated) {
+          // Nothing but the self-reference is left, so the variable would
+          // render as the no-op `export NAME="$NAME"`. Drop the entry whole,
+          // and have the caller unset it from the live shell too.
+          Ok({
+            entry: None,
+            note: "dropped \{value} from \{name}",
+            removed_entry: Some(entry),
+          })
         } else {
           Ok({
             entry: Some(
@@ -242,6 +290,7 @@ fn set_entry(
               ),
             ),
             note: "dropped \{value} from \{name}",
+            removed_entry: None,
           })
         }
       }
@@ -262,6 +311,7 @@ fn set_entry(
         ),
       ),
       note: "\{verb} \{value} to \{name}",
+      removed_entry: None,
     })
   } else if flags.raw {
     if value.contains("\\") || !refs_translatable(value) {
@@ -286,6 +336,7 @@ fn set_entry(
           ),
         ),
         note: "",
+        removed_entry: None,
       })
     }
   } else if path_like {
@@ -312,6 +363,7 @@ fn set_entry(
             ),
           ),
           note: "",
+          removed_entry: None,
         })
       }
     } else if value.contains(":") || value.contains(";") {
@@ -327,6 +379,7 @@ fn set_entry(
           ),
         ),
         note: "",
+        removed_entry: None,
       })
     } else {
       let root = if base.length() > 0 { base } else { self_ref(name) }
@@ -343,6 +396,7 @@ fn set_entry(
           ),
         ),
         note: "prepended \{value} to \{name}",
+        removed_entry: None,
       })
     }
   } else {
@@ -351,6 +405,7 @@ fn set_entry(
         Entry::new_full(kind, name, value, false, false, imported=was_imported),
       ),
       note: "",
+      removed_entry: None,
     })
   }
 }
@@ -395,6 +450,14 @@ fn cmd_set(args : Array[String]) -> CliResult {
       },
     )
   }
+  // A newline or other control character cannot be represented faithfully in
+  // every family: csh/tcsh cannot put a line break inside a quoted string at
+  // all, so a value carrying one would corrupt `.tcshrc` rather than set it.
+  if has_control_char(value) {
+    return failure(
+      "shrc: a value cannot contain a newline or control character",
+    )
+  }
   let entries = load_entries()
   let existing = find_entry(entries, Entry::new(kind, name, value))
   let outcome = match set_entry(kind, name, value, flags, existing) {
@@ -403,6 +466,39 @@ fn cmd_set(args : Array[String]) -> CliResult {
   }
   let entry = match outcome.entry {
     None => {
+      // A `--drop` that emptied the search path removes the entry itself, so
+      // the live shell is told to unset it and the startup files lose it too.
+      let removed = outcome.removed_entry
+      match removed {
+        Some(gone) => {
+          let entries = remove_by_name(entries, gone.name).0
+          match save_entries(entries) {
+            Ok(_) => ()
+            Err(message) => return failure("shrc: \{message}")
+          }
+          let shells = current_shells()
+          let errors = apply_to_shells(entries, shells)
+          let out = if flags.quiet {
+            ""
+          } else {
+            render_remove(current_eval_family(), gone)
+          }
+          let notes = if flags.quiet { [] } else { ["shrc: \{outcome.note}"] }
+          for message in errors {
+            notes.push("shrc: \{message}")
+          }
+          return {
+            code: if errors.length() > 0 {
+              1
+            } else {
+              0
+            },
+            out,
+            err: notes.join("\n"),
+          }
+        }
+        None => ()
+      }
       if flags.quiet {
         return ok("")
       }

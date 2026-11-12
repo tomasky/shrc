@@ -180,7 +180,7 @@ fn strip_leading_ws(text : String) -> String {
   if i == 0 {
     text
   } else {
-    text.view(start_offset=i).to_owned()
+    text.clamped_view(start=i).to_owned()
   }
 }
 
@@ -192,7 +192,7 @@ fn after_keyword(line : String, keyword : String) -> String? {
   if !line.has_prefix(keyword) {
     return None
   }
-  let rest = line.view(start_offset=keyword.length()).to_owned()
+  let rest = line.clamped_view(start=keyword.length()).to_owned()
   if rest.length() == 0 {
     return None
   }
@@ -233,7 +233,7 @@ fn split_words(text : String) -> Array[String]? {
     if quote is Some(_) {
       return None
     }
-    words.push(text.view(start_offset=start, end_offset=i).to_owned())
+    words.push(text.clamped_view(start~, end=i).to_owned())
   }
   Some(words)
 }
@@ -260,7 +260,7 @@ fn parse_rhs(rhs : String) -> ValueForm {
   let first = chars[0]
   if first == '\'' || first == '"' {
     if len >= 2 && chars[len - 1] == first {
-      let inner = rhs.view(start_offset=1, end_offset=len - 1).to_owned()
+      let inner = rhs.clamped_view(start=1, end=len - 1).to_owned()
       let has_quote = if first == '\'' {
         inner.contains("'")
       } else {
@@ -280,8 +280,8 @@ fn parse_rhs(rhs : String) -> ValueForm {
   while end < len && chars[end] != ' ' && chars[end] != '\t' {
     end = end + 1
   }
-  let token = rhs.view(end_offset=end).to_owned()
-  let rest = rhs.view(start_offset=end).to_owned().to_array()
+  let token = rhs.clamped_view(end~).to_owned()
+  let rest = rhs.clamped_view(start=end).to_owned().to_array()
   let mut i = 0
   while i < rest.length() && (rest[i] == ' ' || rest[i] == '\t') {
     i = i + 1
@@ -514,7 +514,7 @@ fn fish_set(rest : String) -> LineScan {
     } else if flag.has_prefix("--") {
       return Retain
     } else {
-      let letters = flag.view(start_offset=1).to_owned()
+      let letters = flag.clamped_view(start=1).to_owned()
       let mut known = true
       for ch in letters.to_array() {
         if ch == 'x' {
@@ -611,9 +611,7 @@ fn nu_value(name : String, value : String) -> LineScan {
     if chars.length() < 3 || chars[chars.length() - 1] != quote {
       return Retain
     }
-    let inner = value
-      .view(start_offset=2, end_offset=value.length() - 1)
-      .to_owned()
+    let inner = value.clamped_view(start=2, end=value.length() - 1).to_owned()
     if inner.contains("\\") ||
       !refs_translatable(inner) ||
       inner.contains("[") ||
@@ -682,13 +680,13 @@ fn nu_alias(rest : String) -> LineScan {
 /// Scan a line of a nushell config file.
 fn scan_nu(line : String) -> LineScan {
   if line.has_prefix("$env.") {
-    nu_env(line.view(start_offset=5).to_owned())
+    nu_env(line.clamped_view(start=5).to_owned())
   } else if line.has_prefix("${env:") {
     match line.find("}") {
       Some(end) =>
         if end > 6 {
-          let name = line.view(start_offset=6, end_offset=end).to_owned()
-          nu_env("\{name}=\{line.view(start_offset=end + 1)}")
+          let name = line.clamped_view(start=6, end~).to_owned()
+          nu_env("\{name}=\{line.clamped_view(start=end + 1)}")
         } else {
           Ignore
         }
@@ -741,13 +739,13 @@ fn pwsh_env(rest : String) -> LineScan {
 /// Scan a line of a PowerShell profile.
 fn scan_pwsh(line : String) -> LineScan {
   if line.has_prefix("$env:") {
-    pwsh_env(line.view(start_offset=5).to_owned())
+    pwsh_env(line.clamped_view(start=5).to_owned())
   } else if line.has_prefix("${env:") {
     match line.find("}") {
       Some(end) =>
         if end > 6 {
-          let name = line.view(start_offset=6, end_offset=end).to_owned()
-          pwsh_env("\{name}=\{line.view(start_offset=end + 1)}")
+          let name = line.clamped_view(start=6, end~).to_owned()
+          pwsh_env("\{name}=\{line.clamped_view(start=end + 1)}")
         } else {
           Ignore
         }
@@ -788,7 +786,7 @@ fn indent_of(line : String) -> String {
   while i < chars.length() && (chars[i] == ' ' || chars[i] == '\t') {
     i = i + 1
   }
-  line.view(end_offset=i).to_owned()
+  line.clamped_view(end=i).to_owned()
 }
 
 ///|
@@ -841,8 +839,8 @@ fn posix_block_delta(line : String) -> Int32 {
 /// one.
 fn brace_delta(line : String) -> Int32 {
   let trimmed = strip_leading_ws(line).trim_end().to_owned()
-  let opens = if trimmed.view().has_suffix("{") { 1 } else { 0 }
-  let closes = if trimmed.view().has_prefix("}") { 1 } else { 0 }
+  let opens = if trimmed.has_suffix("{") { 1 } else { 0 }
+  let closes = if trimmed.has_prefix("}") { 1 } else { 0 }
   opens - closes
 }
 
@@ -885,7 +883,7 @@ fn heredoc_terminator(line : String) -> String? {
   match line.find("<<") {
     None => None
     Some(index) => {
-      let rest = line.view(start_offset=index + 2).to_owned().to_array()
+      let rest = line.clamped_view(start=index + 2).to_owned().to_array()
       let mut i = 0
       if i < rest.length() && rest[i] == '-' {
         i = i + 1
@@ -1057,7 +1055,7 @@ fn trim_token_end(token : String) -> String {
       break
     }
   }
-  token.view(end_offset=end).to_owned()
+  token.clamped_view(end~).to_owned()
 }
 
 ///|
@@ -1065,11 +1063,11 @@ fn trim_token_end(token : String) -> String {
 fn home_path(token : String) -> String? {
   let home = home_dir()
   if token.has_prefix("~/") {
-    Some(path_join(home, token.view(start_offset=2).to_owned()))
+    Some(path_join(home, token.clamped_view(start=2).to_owned()))
   } else if token.has_prefix("$HOME/") {
-    Some(path_join(home, token.view(start_offset=6).to_owned()))
+    Some(path_join(home, token.clamped_view(start=6).to_owned()))
   } else if token.has_prefix("${HOME}/") {
-    Some(path_join(home, token.view(start_offset=8).to_owned()))
+    Some(path_join(home, token.clamped_view(start=8).to_owned()))
   } else {
     None
   }
@@ -1106,7 +1104,7 @@ fn source_path_text(line : String) -> String? {
           before == '(' ||
           before == '|'
         if at_word_start {
-          let rest = line.view(start_offset=index + marker.length()).to_owned()
+          let rest = line.clamped_view(start=index + marker.length()).to_owned()
           match split_words(rest) {
             Some(words) =>
               if words.length() > 0 {
@@ -1243,5 +1241,5 @@ fn leading_indent(text : String) -> String {
   while i < chars.length() && (chars[i] == ' ' || chars[i] == '\t') {
     i = i + 1
   }
-  text.view(end_offset=i).to_owned()
+  text.clamped_view(end=i).to_owned()
 }

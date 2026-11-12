@@ -27,7 +27,7 @@ pub fn search_path_vars() -> Array[String] {
 /// `PATH`, `PYTHONPATH`, `LD_LIBRARY_PATH` and a project's own `MYPATH` all
 /// behave the same.
 pub fn is_search_path_name(name : String) -> Bool {
-  if name.view().has_suffix("PATH") {
+  if name.has_suffix("PATH") {
     return true
   }
   for known in search_path_vars() {
@@ -75,8 +75,8 @@ pub fn join_path(parts : Array[String]) -> String {
 /// is kept.
 pub fn normalize_dir(dir : String) -> String {
   let mut text = dir
-  while text.length() > 1 && text.view().has_suffix("/") {
-    text = text.view(end_offset=text.length() - 1).to_owned()
+  while text.length() > 1 && text.has_suffix("/") {
+    text = text.clamped_view(end=text.length() - 1).to_owned()
   }
   text
 }
@@ -104,6 +104,25 @@ pub fn path_insert(value : String, dir : String, at_end : Bool) -> String {
     kept.insert(0, dir)
   }
   join_path(kept)
+}
+
+///|
+/// Whether a stored search path is nothing but its own self-reference, i.e.
+/// it no longer says anything the shell does not already know. Dropping the
+/// last real directory from `/opt/x:$PATH` leaves `$PATH`, which would render
+/// as the no-op `export PATH="$PATH"`; such an entry is removed instead.
+pub fn is_empty_path(name : String, value : String) -> Bool {
+  let parts = split_path(value)
+  if parts.length() == 0 {
+    return true
+  }
+  let mut real = 0
+  for part in parts {
+    if part != self_ref(name) {
+      real = real + 1
+    }
+  }
+  real == 0
 }
 
 ///|

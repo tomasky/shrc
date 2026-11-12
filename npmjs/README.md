@@ -65,7 +65,7 @@ dependency declares one:
 $ pnpm add @tomasko/shrc
 Error: ERR_PNPM_IGNORED_BUILDS
   × adding a new package
-  ╰─▶ Ignored build scripts: @tomasko/shrc@0.1.5
+  ╰─▶ Ignored build scripts: @tomasko/shrc@0.1.6
 ```
 
 Downloading lazily from `bin/shrc.js` sidesteps all of it: it works under npm,

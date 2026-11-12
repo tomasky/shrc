@@ -2,7 +2,7 @@
 # shrc installer — https://github.com/tomasky/shrc
 #
 #   curl -LsSf https://raw.githubusercontent.com/tomasky/shrc/master/install.sh | bash
-#   curl -LsSf https://raw.githubusercontent.com/tomasky/shrc/master/install.sh | bash -s -- --version 0.1.5
+#   curl -LsSf https://raw.githubusercontent.com/tomasky/shrc/master/install.sh | bash -s -- --version 0.1.6
 #
 # The installer places the `shrc` binary, makes it reachable, and runs
 # `shrc init` once so the configuration the startup files already define is
@@ -34,7 +34,7 @@ Usage:
   install.sh [options]
 
 Options:
-  -v, --version <version>       install a specific version (e.g. 0.1.5)
+  -v, --version <version>       install a specific version (e.g. 0.1.6)
   -b, --install-dir <dir>       install into <dir>
       --no-modify-path          do not edit any shell startup file
       --no-init                 skip the 'shrc init' step

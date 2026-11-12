@@ -17,12 +17,22 @@ pub fn load_entries() -> Array[Entry] {
 ///|
 /// Persist the manifest, creating `SHRC_HOME` when needed.
 pub fn save_entries(entries : Array[Entry]) -> Result[Unit, String] {
+  let text = serialize_entries(entries)
+  // Leave an identical manifest alone: a no-op command should not rewrite the
+  // file (and its mtime).
+  let path = manifest_path()
+  if @fs.path_exists(path) {
+    let current = @fs.read_file_to_string(path) catch { _ => "" }
+    if current == text {
+      return Ok(())
+    }
+  }
   match ensure_dir(shrc_home()) {
     Ok(_) => ()
     Err(msg) => return Err(msg)
   }
-  @fs.write_string_to_file(manifest_path(), serialize_entries(entries)) catch {
-    _ => return Err("cannot write '\{manifest_path()}'")
+  @fs.write_string_to_file(path, text) catch {
+    _ => return Err("cannot write '\{path}'")
   }
   Ok(())
 }
@@ -56,7 +66,13 @@ pub fn apply_to_shells(
     }
     let updated = sync_block(existing, shell.family, managed)
     // Removing the last entry leaves an empty block, and an empty block in a
-    // file that never existed should not create one.
+    // file that never existed should not create one. A file whose contents
+    // already match is not rewritten at all: `shrc set` runs on every change,
+    // and rewriting an unchanged file would touch its mtime and wake up
+    // dotfile watchers for nothing.
+    if exists && updated == existing {
+      continue
+    }
     if exists || updated.length() > 0 {
       match ensure_dir(path_dirname(shell.rc)) {
         Ok(_) => ()

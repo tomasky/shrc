@@ -5,7 +5,7 @@
 
 name = "kupas/shrc"
 
-version = "0.1.5"
+version = "0.1.6"
 
 readme = "README.mbt.md"
 
@@ -30,5 +30,5 @@ description = "Manage environment variables and aliases across bash, zsh, fish a
 preferred_target = "native"
 
 import {
-  "moonbitlang/x@0.5.5",
+  "moonbitlang/x@0.5.7",
 }

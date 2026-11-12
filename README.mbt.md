@@ -1,6 +1,7 @@
 # shrc
 
 [![CI](https://github.com/tomasky/shrc/actions/workflows/ci.yml/badge.svg)](https://github.com/tomasky/shrc/actions/workflows/ci.yml)
+[![version](https://img.shields.io/badge/version-0.1.6-blue.svg)](https://github.com/tomasky/shrc/releases)
 [![npm](https://img.shields.io/npm/v/@tomasko/shrc.svg)](https://www.npmjs.com/package/@tomasko/shrc)
 [![Mooncakes](https://img.shields.io/badge/mooncakes-kupas%2Fshrc-blue)](https://mooncakes.io/docs/kupas/shrc)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](#license)
@@ -46,7 +47,7 @@ are in. Sourcing the script updates the current shell too:
 source <(curl -LsSf https://raw.githubusercontent.com/tomasky/shrc/master/install.sh)
 ```
 
-Options: `--version <v>` (`-v`, e.g. `--version 0.1.2`), `--install-dir <dir>`
+Options: `--version <v>` (`-v`, e.g. `--version 0.1.6`), `--install-dir <dir>`
 (`-b`), `--no-modify-path`, `--no-init`, `--no-verify`. Run `install.sh --help`
 for the full list and the environment overrides (`SHRC_VERSION`,
 `SHRC_INSTALL_DIR`, `SHRC_REPO`, `SHRC_DOWNLOAD_BASE`, `SHRC_NO_MODIFY_PATH`,

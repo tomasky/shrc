@@ -14,6 +14,8 @@ pub fn candidate_shells(String, String, String) -> Array[Shell]
 
 pub fn canonical_list(String, String) -> String
 
+pub fn command_writes(Array[String]) -> Bool
+
 pub fn current_eval_family() -> ShellFamily
 
 pub fn current_shells() -> Array[Shell]
@@ -21,6 +23,8 @@ pub fn current_shells() -> Array[Shell]
 pub fn detect_shells(String, String, String, String?, (String) -> Bool) -> Array[Shell]
 
 pub fn dispatch(Array[String]) -> CliResult
+
+pub fn edit_definition_in_text(String, ShellFamily, String, String?) -> (String, Bool)
 
 pub fn ensure_dir(String) -> Result[Unit, String]
 
@@ -44,11 +48,15 @@ pub fn format_all(Array[Entry], Array[Shell]) -> String
 
 pub fn format_ls(Array[Entry]) -> String
 
+pub fn has_control_char(String) -> Bool
+
 pub fn help_text() -> String
 
 pub fn home_dir() -> String
 
 pub fn install_shell_integration() -> Unit
+
+pub fn is_empty_path(String, String) -> Bool
 
 pub fn is_search_path_entry(Entry) -> Bool
 
@@ -68,7 +76,7 @@ pub fn load_entries() -> Array[Entry]
 
 pub fn manifest_path() -> String
 
-pub fn merge_candidates(Array[Entry], Array[Entry], Array[Entry]) -> (Int, Int)
+pub fn merge_candidates(Array[Entry], Array[Entry], Array[Entry]) -> (Int32, Int32)
 
 pub fn normalize_dir(String) -> String
 
@@ -156,7 +164,7 @@ pub fn zdotdir() -> String
 
 // Types and methods
 pub(all) struct CliResult {
-  code : Int
+  code : Int32
   out : String
   err : String
 }
@@ -167,9 +175,10 @@ pub(all) struct Entry {
   value : String
   raw : Bool
   list : Bool
+  imported : Bool
 }
 pub fn Entry::new(EntryKind, String, String) -> Self
-pub fn Entry::new_full(EntryKind, String, String, Bool, Bool) -> Self
+pub fn Entry::new_full(EntryKind, String, String, Bool, Bool, imported? : Bool) -> Self
 pub fn Entry::new_raw(EntryKind, String, String) -> Self
 
 pub(all) enum EntryKind {
@@ -180,7 +189,7 @@ pub(all) enum EntryKind {
 pub(all) struct FileScan {
   cleaned : String
   entries : Array[Entry]
-  retained : Int
+  retained : Int32
 }
 
 pub(all) struct Shell {
